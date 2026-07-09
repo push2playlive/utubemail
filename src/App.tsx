@@ -63,6 +63,13 @@ export default function App() {
   // Local Time clock for technical aesthetic (CommandNexus style)
   const [currentTime, setCurrentTime] = useState<string>('');
 
+  // Dynamic password strength metrics
+  const isLengthValid = passwordInput.length >= 8;
+  const isCasingValid = /[a-z]/.test(passwordInput) && /[A-Z]/.test(passwordInput);
+  const isNumberValid = /[0-9]/.test(passwordInput);
+  const isSymbolValid = /[^a-zA-Z0-9]/.test(passwordInput);
+  const strengthScore = passwordInput ? [isLengthValid, isCasingValid, isNumberValid, isSymbolValid].filter(Boolean).length : 0;
+
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -616,6 +623,63 @@ export default function App() {
                           {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
+
+                      {/* Real-time Password Strength Visual Indicator */}
+                      {isSignUp && passwordInput && (
+                        <div className="mt-2.5 p-3.5 bg-gray-50 border border-gray-200 rounded-xl space-y-2.5 transition-all duration-300">
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="font-mono text-gray-500 uppercase tracking-wider font-bold">Key Signature Strength:</span>
+                            <span className={`font-mono font-black uppercase tracking-wider text-[11px] ${
+                              strengthScore === 1 ? 'text-rose-600 animate-pulse' :
+                              strengthScore === 2 ? 'text-amber-600' :
+                              strengthScore === 3 ? 'text-indigo-600 font-bold' :
+                              'text-emerald-600 font-black'
+                            }`}>
+                              {strengthScore === 1 && 'Critical Vulnerability ⚠️'}
+                              {strengthScore === 2 && 'Susceptible / Weak'}
+                              {strengthScore === 3 && 'Armored Key Pair'}
+                              {strengthScore === 4 && 'Post-Quantum Secure ⚡'}
+                            </span>
+                          </div>
+
+                          {/* 4 Segmented bar */}
+                          <div className="grid grid-cols-4 gap-1.5 h-1.5">
+                            {[1, 2, 3, 4].map((seg) => (
+                              <div
+                                key={seg}
+                                className={`h-full rounded-full transition-all duration-300 ${
+                                  seg <= strengthScore
+                                    ? strengthScore === 1 ? 'bg-rose-500' :
+                                      strengthScore === 2 ? 'bg-amber-500' :
+                                      strengthScore === 3 ? 'bg-indigo-500' :
+                                      'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]'
+                                    : 'bg-gray-200'
+                                }`}
+                              />
+                            ))}
+                          </div>
+
+                          {/* Requirements list with active colored badges */}
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-2 pt-1 text-[10px] font-mono">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${isLengthValid ? 'bg-emerald-500 scale-125' : 'bg-gray-300'}`} />
+                              <span className={isLengthValid ? 'text-gray-900 font-extrabold' : 'text-gray-500'}>8+ Characters</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${isCasingValid ? 'bg-emerald-500 scale-125' : 'bg-gray-300'}`} />
+                              <span className={isCasingValid ? 'text-gray-900 font-extrabold' : 'text-gray-500'}>Aa-Zz Casing</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${isNumberValid ? 'bg-emerald-500 scale-125' : 'bg-gray-300'}`} />
+                              <span className={isNumberValid ? 'text-gray-900 font-extrabold' : 'text-gray-500'}>0-9 Number</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${isSymbolValid ? 'bg-emerald-500 scale-125' : 'bg-gray-300'}`} />
+                              <span className={isSymbolValid ? 'text-gray-900 font-extrabold' : 'text-gray-500'}>Special Symbol</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {isSignUp && (

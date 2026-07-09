@@ -612,6 +612,35 @@ export const DashboardPreview: React.FC<DashboardPreviewProps> = ({
                       </p>
                     </div>
                   </div>
+
+                  <div className="p-4 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-between">
+                    <div className="pr-4">
+                      <h5 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                        <ShieldAlert className="w-4 h-4 text-orange-brand" />
+                        <span>CommandNexus Security Alerts</span>
+                      </h5>
+                      <p className="text-[11px] text-gray-500 mt-1 leading-normal">
+                        Receive instant cryptographic signals on new node authorizations and key rotation events.
+                      </p>
+                    </div>
+                    
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextVal = userProfile.securityNotifications === false;
+                        onUpdateProfile({ securityNotifications: nextVal });
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        userProfile.securityNotifications !== false ? 'bg-orange-brand' : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                          userProfile.securityNotifications !== false ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

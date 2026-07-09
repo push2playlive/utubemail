@@ -14,6 +14,7 @@ interface DBUser {
   avatarSeed: string;
   accentColor: string;
   bgGradientStyle: 'soft-grey' | 'metallic' | 'dark-platinum' | 'stardust';
+  securityNotifications?: boolean;
 }
 
 // In-memory data store for demonstration persistence
@@ -43,7 +44,8 @@ async function startServer() {
     tier: "premium",
     avatarSeed: "nexus-operator-seed-982",
     accentColor: "#d35400",
-    bgGradientStyle: "soft-grey"
+    bgGradientStyle: "soft-grey",
+    securityNotifications: true
   };
 
   // --- API Authentication Endpoints ---
@@ -84,7 +86,8 @@ async function startServer() {
       tier: tier === "premium" ? "premium" : "standard",
       avatarSeed: `nexus-${username.toLowerCase().replace(/\s+/g, "-")}-${Math.floor(100 + Math.random() * 900)}`,
       accentColor: "#d35400",
-      bgGradientStyle: "soft-grey"
+      bgGradientStyle: "soft-grey",
+      securityNotifications: true
     };
 
     // Return successfully with code (to simulate receiving email in user interface)
@@ -185,7 +188,8 @@ async function startServer() {
         tier: user.tier,
         avatarSeed: user.avatarSeed,
         accentColor: user.accentColor,
-        bgGradientStyle: user.bgGradientStyle
+        bgGradientStyle: user.bgGradientStyle,
+        securityNotifications: user.securityNotifications !== false
       }
     });
   });
@@ -213,7 +217,8 @@ async function startServer() {
         tier: user.tier,
         avatarSeed: user.avatarSeed,
         accentColor: user.accentColor,
-        bgGradientStyle: user.bgGradientStyle
+        bgGradientStyle: user.bgGradientStyle,
+        securityNotifications: user.securityNotifications !== false
       }
     });
   });
@@ -243,12 +248,13 @@ async function startServer() {
     }
 
     const user = users[email];
-    const { username, accentColor, bgGradientStyle, tier } = req.body;
+    const { username, accentColor, bgGradientStyle, tier, securityNotifications } = req.body;
 
     if (username) user.username = username;
     if (accentColor) user.accentColor = accentColor;
     if (bgGradientStyle) user.bgGradientStyle = bgGradientStyle;
     if (tier === "premium" || tier === "standard") user.tier = tier;
+    if (securityNotifications !== undefined) user.securityNotifications = securityNotifications;
 
     res.json({
       success: true,
@@ -258,7 +264,8 @@ async function startServer() {
         tier: user.tier,
         avatarSeed: user.avatarSeed,
         accentColor: user.accentColor,
-        bgGradientStyle: user.bgGradientStyle
+        bgGradientStyle: user.bgGradientStyle,
+        securityNotifications: user.securityNotifications !== false
       }
     });
   });

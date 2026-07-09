@@ -5,6 +5,7 @@ export interface UserProfile {
   avatarSeed: string;
   accentColor: string; // hex or tailwind color
   bgGradientStyle: 'soft-grey' | 'metallic' | 'dark-platinum' | 'stardust';
+  securityNotifications?: boolean;
 }
 
 export interface Email {
