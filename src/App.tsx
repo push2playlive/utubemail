@@ -16,7 +16,9 @@ import {
   Zap,
   CheckCircle,
   Clock,
-  ExternalLink
+  ExternalLink,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { EnvelopeLogo } from './components/EnvelopeLogo';
 import { HamburgerMenu } from './components/HamburgerMenu';
@@ -37,6 +39,16 @@ export default function App() {
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loginFeedback, setLoginFeedback] = useState<string | null>(null);
+
+  // Backend verification and session states
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState('');
+  const [verificationCodeInput, setVerificationCodeInput] = useState('');
+  const [activeSessionToken, setActiveSessionToken] = useState('');
+  const [tempVerificationCode, setTempVerificationCode] = useState<string | null>(null);
+
+  // FAQ state
+  const [activeFaqIndex, setActiveFaqIndex] = useState<number | null>(0);
 
   // User Profile State synced to dashboard preview
   const [userProfile, setUserProfile] = useState<UserProfile>({
@@ -72,10 +84,35 @@ export default function App() {
     }));
   }, [tier]);
 
-  const handleUpdateProfile = (newValues: Partial<UserProfile>) => {
+  // Try to restore user session on mount
+  useEffect(() => {
+    const savedToken = localStorage.getItem('utubemail_session');
+    if (savedToken) {
+      fetch('/api/auth/session', {
+        headers: {
+          'Authorization': `Bearer ${savedToken}`
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.user) {
+          setIsLoggedIn(true);
+          setActiveSessionToken(savedToken);
+          setUserProfile(data.user);
+          setTier(data.user.tier);
+        } else {
+          localStorage.removeItem('utubemail_session');
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem('utubemail_session');
+      });
+    }
+  }, []);
+
+  const handleUpdateProfile = async (newValues: Partial<UserProfile>) => {
     setUserProfile(prev => {
       const updated = { ...prev, ...newValues };
-      // Keep email clean based on tier
       if (newValues.username) {
         updated.email = updated.tier === 'premium'
           ? `${newValues.username.toLowerCase().replace(/\s+/g, '')}@utubemail.com`
@@ -83,32 +120,173 @@ export default function App() {
       }
       return updated;
     });
+
+    if (isLoggedIn && activeSessionToken) {
+      try {
+        await fetch('/api/auth/profile/update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${activeSessionToken}`
+          },
+          body: JSON.stringify(newValues)
+        });
+      } catch (err) {
+        console.error("Failed to sync profile changes to backend", err);
+      }
+    }
   };
 
-  const handleAccessMailboxSubmit = (e: React.FormEvent) => {
+  const handleAccessMailboxSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!passwordInput) {
-      setLoginFeedback('⚠️ Cryptographic handshake key is required.');
+    setLoginFeedback(null);
+
+    const handleSuffix = tier === 'premium' ? '@utubemail.com' : '@utubemail.free';
+    const cleanEmailInput = emailInput.trim();
+    const fullEmail = cleanEmailInput.includes('@') 
+      ? cleanEmailInput 
+      : `${cleanEmailInput || 'operator'}${handleSuffix}`;
+
+    if (isSignUp) {
+      // Registration flow with backend hashing & salting
+      if (!usernameInput) {
+        setLoginFeedback('⚠️ Username is required for registration.');
+        return;
+      }
+      try {
+        const response = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: usernameInput,
+            email: fullEmail,
+            password: passwordInput,
+            tier: tier
+          })
+        });
+        const data = await response.json();
+        if (data.success) {
+          setIsVerifying(true);
+          setVerificationEmail(data.email);
+          setTempVerificationCode(data.verificationCode);
+          setLoginFeedback(null);
+        } else {
+          setLoginFeedback(`❌ ${data.error || 'Registration failed.'}`);
+        }
+      } catch (err) {
+        setLoginFeedback('❌ Network handshake failure. Could not contact node auth server.');
+      }
+    } else {
+      // Login flow with backend password hash verification
+      try {
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: fullEmail,
+            password: passwordInput
+          })
+        });
+        const data = await response.json();
+        if (data.success) {
+          setIsLoggedIn(true);
+          setActiveSessionToken(data.sessionToken);
+          localStorage.setItem('utubemail_session', data.sessionToken);
+          setUserProfile(data.user);
+          setTier(data.user.tier);
+          setLoginFeedback(null);
+          alert(`🔑 Security handshake completed! Cryptographic channel armed for node operator: ${data.user.username}`);
+        } else {
+          if (data.pendingVerification) {
+            setIsVerifying(true);
+            setVerificationEmail(data.email);
+            // Auto resend/capture code for verification simulation
+            try {
+              const resendRes = await fetch('/api/auth/resend', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: data.email })
+              });
+              const resendData = await resendRes.json();
+              if (resendData.success) {
+                setTempVerificationCode(resendData.verificationCode);
+              }
+            } catch {}
+            setLoginFeedback('⚠️ Node verification required. Enter code dispatched below.');
+          } else {
+            setLoginFeedback(`❌ ${data.error || 'Access Denied. Signature mismatch.'}`);
+          }
+        }
+      } catch (err) {
+        setLoginFeedback('❌ Network handshake failure. Could not contact node auth server.');
+      }
+    }
+  };
+
+  const handleVerifySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!verificationCodeInput) {
+      setLoginFeedback('⚠️ Please enter the 6-digit cryptographic activation code.');
       return;
     }
-
-    const username = usernameInput || 'Sovereign Operator';
-    const email = emailInput || (tier === 'premium' ? 'operator@utubemail.com' : 'operator@utubemail.free');
-
-    setUserProfile(prev => ({
-      ...prev,
-      username: username,
-      email: email,
-      tier: tier
-    }));
-
-    setIsLoggedIn(true);
-    setLoginFeedback(null);
-    alert(`🔑 Handshake completed! Secured cryptographic channel established for operator: ${username}`);
+    try {
+      const response = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: verificationEmail,
+          code: verificationCodeInput
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        alert('✨ Node verification completed successfully! Handshake authorized. You can now login.');
+        setIsVerifying(false);
+        setIsSignUp(false);
+        setTempVerificationCode(null);
+        setVerificationCodeInput('');
+        setLoginFeedback('✅ Node verified successfully! Please log in.');
+      } else {
+        setLoginFeedback(`❌ ${data.error || 'Verification failed.'}`);
+      }
+    } catch (err) {
+      setLoginFeedback('❌ Network error during cryptographic verification check.');
+    }
   };
 
-  const handleLogout = () => {
+  const handleResendCode = async () => {
+    try {
+      const response = await fetch('/api/auth/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: verificationEmail })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setTempVerificationCode(data.verificationCode);
+        setLoginFeedback('📨 A new security passcode has been dispatched.');
+      } else {
+        setLoginFeedback(`❌ ${data.error || 'Failed to resend code.'}`);
+      }
+    } catch (err) {
+      setLoginFeedback('❌ Network failure trying to dispatch passcode.');
+    }
+  };
+
+  const handleLogout = async () => {
+    if (activeSessionToken) {
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${activeSessionToken}`
+          }
+        });
+      } catch (err) {}
+    }
     setIsLoggedIn(false);
+    setActiveSessionToken('');
+    localStorage.removeItem('utubemail_session');
     setPasswordInput('');
     setLoginFeedback(null);
   };
@@ -269,7 +447,9 @@ export default function App() {
                     </div>
                     <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-xs font-mono text-gray-600">
                       Signature Session Token: <br />
-                      <span className="text-gray-900 font-bold break-all">NEXUS_SYNC_TOKEN_{userProfile.username.toUpperCase().replace(/\s+/g, '_')}</span>
+                      <span className="text-gray-950 font-bold break-all text-[11px] font-mono block mt-1 bg-white/85 p-1.5 rounded border border-gray-300">
+                        {activeSessionToken || `NEXUS_SYNC_TOKEN_${userProfile.username.toUpperCase().replace(/\s+/g, '_')}`}
+                      </span>
                     </div>
                     <div className="flex gap-2 justify-center">
                       <button
@@ -289,6 +469,81 @@ export default function App() {
                       </button>
                     </div>
                   </div>
+                ) : isVerifying ? (
+                  /* Cryptographic activation code entry screen */
+                  <form onSubmit={handleVerifySubmit} className="space-y-4">
+                    
+                    {/* Simulated SMTP Bypass Notification */}
+                    {tempVerificationCode && (
+                      <div className="p-3 bg-indigo-50 border border-indigo-200 text-indigo-950 text-xs rounded-xl flex flex-col gap-1.5 shadow-xs animate-pulse">
+                        <span className="font-bold font-mono text-[10px] uppercase text-indigo-700 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          SMTP Bypass: Simulated Security Code
+                        </span>
+                        <p className="text-[10px] text-indigo-800 leading-normal">
+                          The simulated SMTP server successfully dispatched code: <strong className="text-indigo-900 bg-white px-2 py-0.5 rounded border border-indigo-300 font-mono text-xs">{tempVerificationCode}</strong> to node handle <span className="font-semibold text-indigo-800 break-all">{verificationEmail}</span>.
+                        </p>
+                      </div>
+                    )}
+
+                    {loginFeedback && (
+                      <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-xl flex items-center gap-2">
+                        <span>{loginFeedback}</span>
+                      </div>
+                    )}
+
+                    <div className="text-center py-2">
+                      <Lock className="w-8 h-8 text-orange-brand mx-auto mb-2" />
+                      <h3 className="text-sm font-display font-extrabold text-gray-900">Activate Secure Node</h3>
+                      <p className="text-[11px] text-gray-600 mt-1">
+                        Enter the verification code to register your cryptographic signature keys with CommandNexus.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-mono font-bold text-gray-600 uppercase tracking-widest mb-1.5">
+                        6-Digit Security Passcode
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        required
+                        placeholder="e.g., 583192"
+                        value={verificationCodeInput}
+                        onChange={(e) => setVerificationCodeInput(e.target.value.replace(/\D/g, ''))}
+                        className="w-full text-center text-lg font-mono tracking-widest p-3 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-brand transition-all font-bold text-gray-900"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full mt-2 py-3 bg-orange-trans hover:bg-orange-brand/20 text-orange-brand border border-orange-brand/30 rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all duration-300 shadow-sm hover:shadow flex items-center justify-center gap-2"
+                    >
+                      <span>Activate Handshake Signature</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+
+                    <div className="flex justify-between items-center pt-2 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={handleResendCode}
+                        className="text-gray-600 hover:text-orange-brand font-mono underline cursor-pointer"
+                      >
+                        Resend Code
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsVerifying(false);
+                          setLoginFeedback(null);
+                        }}
+                        className="text-gray-500 hover:text-gray-800 font-mono uppercase tracking-wider"
+                      >
+                        Cancel Verify
+                      </button>
+                    </div>
+
+                  </form>
                 ) : (
                   /* Sign-In/Sign-Up Form Input Fields */
                   <form onSubmit={handleAccessMailboxSubmit} className="space-y-4">
@@ -319,14 +574,14 @@ export default function App() {
                       </label>
                       <div className="flex">
                         <input
-                          type="text"
-                          placeholder={isSignUp ? "yourname" : "operator"}
-                          value={emailInput.split('@')[0]}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setEmailInput(tier === 'premium' ? `${val}@utubemail.com` : `${val}@utubemail.free`);
-                          }}
-                          className="w-full text-xs p-3 rounded-l-xl border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-brand transition-all"
+                           type="text"
+                           placeholder={isSignUp ? "yourname" : "operator"}
+                           value={emailInput.split('@')[0]}
+                           onChange={(e) => {
+                             const val = e.target.value;
+                             setEmailInput(tier === 'premium' ? `${val}@utubemail.com` : `${val}@utubemail.free`);
+                           }}
+                           className="w-full text-xs p-3 rounded-l-xl border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-brand transition-all"
                         />
                         <span className="bg-gray-200 text-gray-600 px-4 flex items-center text-xs font-mono border-y border-r border-gray-300 rounded-r-xl">
                           {tier === 'premium' ? '@utubemail.com' : '@utubemail.free'}
@@ -430,6 +685,105 @@ export default function App() {
           currentTier={tier}
           onSelectTier={setTier}
         />
+
+        {/* FREQUENTLY ASKED QUESTIONS SECTION */}
+        <section className="scroll-mt-24 space-y-8 bg-white/70 backdrop-blur-xl p-6 sm:p-10 rounded-2xl border border-gray-200 shadow-sm">
+          <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
+            
+            {/* Left Column: Title and Accent Details */}
+            <div className="lg:w-1/3 space-y-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-orange-brand/10 border border-orange-brand/20 rounded-full">
+                <HelpCircle className="w-4 h-4 text-orange-brand" />
+                <span className="text-[10px] font-mono font-bold text-orange-brand uppercase tracking-wider">
+                  Knowledge Hub
+                </span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-display font-black text-gray-900 tracking-tight leading-none">
+                Frequently Asked <span className="text-orange-brand">Questions</span>
+              </h2>
+              <p className="text-gray-700 text-xs sm:text-sm leading-relaxed">
+                Unlock granular technical details on how CommandNexus manages keys, routing architectures, and post-quantum zero-knowledge encryption models.
+              </p>
+              <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 flex items-start gap-3">
+                <Shield className="w-5 h-5 text-orange-brand shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-display font-extrabold text-xs text-gray-900 block">E2EE Protocol Active</span>
+                  <span className="text-[10px] text-gray-500 font-mono">Status: Secure Sandbox</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Accordion list */}
+            <div className="lg:w-2/3 space-y-3">
+              {[
+                {
+                  q: "What is CommandNexus and how does it secure my email?",
+                  a: "CommandNexus is our underlying secure ecosystem core. Every email payload, metadata element, and profile setting on utubemail.com is encrypted using AES-GCM-256 and salted pbkdf2 key derivations on the client-side/server edge, preventing unauthenticated routing and zero-knowledge access."
+                },
+                {
+                  q: "Where is my data stored and is it private?",
+                  a: "Your cryptographic mail and security settings are stored in decentralized zero-knowledge vault nodes. Neither utubemail.com nor third-party network providers hold decrypted raw keys; only your local key can decrypt your mailbox data."
+                },
+                {
+                  q: "What is the difference between free and premium encryption tiers?",
+                  a: "Standard tier offers post-quantum signature verification and basic end-to-end encryption. Premium tier unlocks 4K-integrated multi-device payload signing, real-time dynamic salt rotation, and fully dedicated secure enclave computing instances on the CommandNexus grid."
+                },
+                {
+                  q: "How does the simulated SMTP email bypass work?",
+                  a: "For security and testing purposes within our preview, the system bypasses public relays and routes verified activations directly. Authentic production environments route through TLS-hardened, zero-logging transport pipelines."
+                },
+                {
+                  q: "Can anyone access my inbox without my cryptographic passkey?",
+                  a: "Absolutely not. Even system administrators and node operators see only salted, non-invertible hashes. Without the passkey to compute the matching PBKDF2 hash, your inbox remains cryptographically inaccessible."
+                }
+              ].map((faq, index) => {
+                const isOpen = activeFaqIndex === index;
+                return (
+                  <div 
+                    key={index} 
+                    className={`rounded-xl border transition-all duration-300 overflow-hidden ${
+                      isOpen 
+                        ? 'border-orange-brand/30 bg-orange-brand/[0.02] shadow-sm' 
+                        : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                  >
+                    <button
+                      onClick={() => setActiveFaqIndex(isOpen ? null : index)}
+                      className="w-full flex items-center justify-between p-4 text-left transition-all cursor-pointer select-none"
+                    >
+                      <span className="font-display font-extrabold text-xs sm:text-sm text-gray-950 pr-4">
+                        {faq.q}
+                      </span>
+                      <span className={`p-1 rounded-lg transition-transform duration-200 ${
+                        isOpen ? 'bg-orange-brand/10 text-orange-brand rotate-180' : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        <ChevronDown className="w-4 h-4" />
+                      </span>
+                    </button>
+                    
+                    <AnimatePresence initial={false}>
+                      {isOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.25, ease: "easeInOut" }}
+                        >
+                          <div className="px-4 pb-4 pt-1 border-t border-gray-100/50">
+                            <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
+                              {faq.a}
+                            </p>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
+            </div>
+
+          </div>
+        </section>
 
         {/* REAL-TIME SIMULATED AD CAMPAIGN BOARD */}
         <section className="bg-gray-900 text-white rounded-2xl p-6 sm:p-8 border border-gray-800 relative overflow-hidden shadow-2xl">
