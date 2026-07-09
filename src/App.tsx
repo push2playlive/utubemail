@@ -18,7 +18,9 @@ import {
   Clock,
   ExternalLink,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Globe,
+  Languages
 } from 'lucide-react';
 import { EnvelopeLogo } from './components/EnvelopeLogo';
 import { HamburgerMenu } from './components/HamburgerMenu';
@@ -26,8 +28,12 @@ import { FeatureComparison } from './components/FeatureComparison';
 import { SponsorAdBanner } from './components/SponsorAdBanner';
 import { DashboardPreview } from './components/DashboardPreview';
 import { UserProfile } from './types';
+import { useTranslation, Language, translations } from './lib/i18n';
+
 
 export default function App() {
+  const { language, setLanguage, t } = useTranslation();
+  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
   const [tier, setTier] = useState<'standard' | 'premium'>('premium');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -320,7 +326,7 @@ export default function App() {
                 </span>
               </div>
               <span className="text-[10px] font-mono text-gray-800 tracking-wider uppercase block">
-                CommandNexus Partner Node
+                {t('partnerNode')}
               </span>
             </div>
           </div>
@@ -328,12 +334,64 @@ export default function App() {
           {/* Technical Clock/Status Indicator */}
           <div className="hidden md:flex items-center gap-3 bg-white/60 px-3 py-1.5 rounded-lg border border-white/40 shadow-xs font-mono text-[10px] text-gray-800">
             <Clock className="w-3.5 h-3.5 text-orange-brand animate-pulse" />
-            <span className="font-bold">SYSTEM TIME:</span>
+            <span className="font-bold">{t('systemTime')}:</span>
             <span className="tracking-wide text-gray-900 font-bold">{currentTime || 'SYNCING...'}</span>
           </div>
 
           {/* Hamburger Menu & Navigation Action */}
           <div className="flex items-center gap-3">
+            {/* Language Switcher Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/70 hover:bg-white border border-gray-300 text-xs font-mono font-bold uppercase rounded-lg transition-all cursor-pointer select-none"
+              >
+                <Languages className="w-3.5 h-3.5 text-orange-brand" />
+                <span>{language.toUpperCase()}</span>
+                <ChevronDown className={`w-3.5 h-3.5 text-gray-500 transition-transform duration-200 ${isLangDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              <AnimatePresence>
+                {isLangDropdownOpen && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-30" 
+                      onClick={() => setIsLangDropdownOpen(false)}
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                      transition={{ duration: 0.15, ease: "easeOut" }}
+                      className="absolute right-0 mt-2 w-44 bg-white/95 backdrop-blur-md border border-gray-200 rounded-xl shadow-xl overflow-hidden z-40"
+                    >
+                      <div className="p-1.5 space-y-1">
+                        {(['en', 'de', 'es', 'ja'] as Language[]).map((lang) => (
+                          <button
+                            key={lang}
+                            type="button"
+                            onClick={() => {
+                              setLanguage(lang);
+                              setIsLangDropdownOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between px-3 py-1.5 text-left text-xs rounded-lg transition-all cursor-pointer ${
+                              language === lang
+                                ? 'bg-orange-brand/10 text-orange-brand font-bold'
+                                : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+                            }`}
+                          >
+                            <span className="font-medium">{translations[lang].languageName}</span>
+                            <span className="text-[10px] font-mono text-gray-400 uppercase">{lang}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+
             <button
               onClick={() => {
                 setTier(prev => prev === 'standard' ? 'premium' : 'standard');
@@ -341,7 +399,7 @@ export default function App() {
               className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-white/70 hover:bg-white border border-gray-300 text-xs font-mono font-bold uppercase rounded-lg transition-all"
             >
               <Zap className={`w-3.5 h-3.5 ${tier === 'premium' ? 'text-orange-brand fill-orange-brand/20' : 'text-gray-400'}`} />
-              <span>Preview: <strong className="text-orange-brand">{tier.toUpperCase()}</strong></span>
+              <span>{t('preview')}: <strong className="text-orange-brand">{tier.toUpperCase()}</strong></span>
             </button>
 
             {/* Hamburger App Launcher Drawer */}
@@ -364,40 +422,40 @@ export default function App() {
           {/* SEO Optimized Hook Column (Left side) */}
           <div className="lg:col-span-7 space-y-6">
             <span className="text-xs font-mono font-black text-white bg-orange-brand uppercase tracking-widest px-3 py-1 rounded shadow-sm inline-block">
-              COMMANDNEXUS NODE ACCELERATED
+              {t('heroTag')}
             </span>
             
             {/* Targeted H1 Tag */}
             <h1 className="text-3xl sm:text-4xl md:text-5xl font-display font-extrabold text-gray-900 tracking-tight leading-none">
-              Secure Online <br />
-              <span className="text-white drop-shadow-sm">Email Server</span> Node
+              {t('heroTitle1')} <br />
+              <span className="text-white drop-shadow-sm">{t('heroTitle2')}</span>
             </h1>
 
             {/* Targeted H2 Tag */}
             <h2 className="text-lg sm:text-xl font-display font-bold text-gray-800 tracking-tight">
-              Encrypted Cloud Mailbox Portal
+              {t('heroSub')}
             </h2>
 
             <p className="text-gray-800 text-sm sm:text-base leading-relaxed max-w-xl">
-              Experience absolute cryptographic privacy. UTube Mail leverages zero-knowledge asymmetric end-to-end encryption protocols powered by the **CommandNexus** secure ledger framework, ensuring no third parties can scan or read your personal messages.
+              {t('heroDesc')}
             </p>
 
             <div className="grid grid-cols-2 gap-4 max-w-md pt-2">
               <div className="bg-white/45 p-3 rounded-xl border border-white/30 backdrop-blur-xs">
                 <Shield className="w-5 h-5 text-orange-brand mb-1" />
-                <h4 className="text-xs font-bold text-gray-900">Zero-Knowledge E2EE</h4>
-                <p className="text-[11px] text-gray-700 mt-0.5 leading-normal">Your private keys never leave your device.</p>
+                <h4 className="text-xs font-bold text-gray-900">{t('zeroKnowledge')}</h4>
+                <p className="text-[11px] text-gray-700 mt-0.5 leading-normal">{t('zeroKnowledgeDesc')}</p>
               </div>
               <div className="bg-white/45 p-3 rounded-xl border border-white/30 backdrop-blur-xs">
                 <Server className="w-5 h-5 text-orange-brand mb-1" />
-                <h4 className="text-xs font-bold text-gray-900">Distributed Storage</h4>
-                <p className="text-[11px] text-gray-700 mt-0.5 leading-normal">Double-redundant file backups on solid state VPS.</p>
+                <h4 className="text-xs font-bold text-gray-900">{t('distStorage')}</h4>
+                <p className="text-[11px] text-gray-700 mt-0.5 leading-normal">{t('distStorageDesc')}</p>
               </div>
             </div>
 
             <div className="flex items-center gap-2 pt-2 text-xs font-mono text-gray-800 font-semibold">
               <span className="w-2 h-2 rounded-full bg-emerald-700 animate-ping"></span>
-              <span>ACTIVE SYSTEM SYNC: 100% SECURE COMMANDEERING BY COMMANDNEXUS</span>
+              <span>{t('syncStatus')}</span>
             </div>
           </div>
 
@@ -417,7 +475,7 @@ export default function App() {
                 >
                   <span className="flex items-center justify-center gap-2">
                     <LogIn className="w-3.5 h-3.5" />
-                    Secure Sign In
+                    {t('signInTab')}
                   </span>
                 </button>
                 <button
@@ -430,7 +488,7 @@ export default function App() {
                 >
                   <span className="flex items-center justify-center gap-2">
                     <UserPlus className="w-3.5 h-3.5" />
-                    Create Free Node
+                    {t('signUpTab')}
                   </span>
                 </button>
               </div>
@@ -446,10 +504,10 @@ export default function App() {
                     </div>
                     <div>
                       <h3 className="text-lg font-display font-extrabold text-gray-900">
-                        Cryptographic Key Armed
+                        {t('keyArmed')}
                       </h3>
                       <p className="text-xs text-gray-600 mt-1">
-                        Signed in securely as <span className="font-mono font-bold text-gray-900">{userProfile.username}</span>
+                        {t('identity')}: <span className="font-mono font-bold text-gray-900">{userProfile.username}</span>
                       </p>
                     </div>
                     <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-xs font-mono text-gray-600">
@@ -466,13 +524,13 @@ export default function App() {
                         }}
                         className="px-4 py-2 bg-orange-brand text-white text-xs font-mono font-bold uppercase rounded-lg hover:bg-orange-brand/90 transition-all shadow-sm"
                       >
-                        Enter Mailbox
+                        {t('secureDashboard')}
                       </button>
                       <button
                         onClick={handleLogout}
                         className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-mono font-bold uppercase rounded-lg transition-all border border-gray-300"
                       >
-                        Revoke Key (Logout)
+                        {t('logoutBtn')}
                       </button>
                     </div>
                   </div>
@@ -501,21 +559,21 @@ export default function App() {
 
                     <div className="text-center py-2">
                       <Lock className="w-8 h-8 text-orange-brand mx-auto mb-2" />
-                      <h3 className="text-sm font-display font-extrabold text-gray-900">Activate Secure Node</h3>
+                      <h3 className="text-sm font-display font-extrabold text-gray-900">{t('enterActivation')}</h3>
                       <p className="text-[11px] text-gray-600 mt-1">
-                        Enter the verification code to register your cryptographic signature keys with CommandNexus.
+                        Please enter the 6-digit cryptographic activation code sent to {verificationEmail}.
                       </p>
                     </div>
 
                     <div>
                       <label className="block text-[10px] font-mono font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                        6-Digit Security Passcode
+                        {t('verificationCodeLabel')}
                       </label>
                       <input
                         type="text"
                         maxLength={6}
                         required
-                        placeholder="e.g., 583192"
+                        placeholder={t('verificationPlaceholder')}
                         value={verificationCodeInput}
                         onChange={(e) => setVerificationCodeInput(e.target.value.replace(/\D/g, ''))}
                         className="w-full text-center text-lg font-mono tracking-widest p-3 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-brand transition-all font-bold text-gray-900"
@@ -526,7 +584,7 @@ export default function App() {
                       type="submit"
                       className="w-full mt-2 py-3 bg-orange-trans hover:bg-orange-brand/20 text-orange-brand border border-orange-brand/30 rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all duration-300 shadow-sm hover:shadow flex items-center justify-center gap-2"
                     >
-                      <span>Activate Handshake Signature</span>
+                      <span>{t('verifyBtn')}</span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
 
@@ -536,7 +594,7 @@ export default function App() {
                         onClick={handleResendCode}
                         className="text-gray-600 hover:text-orange-brand font-mono underline cursor-pointer"
                       >
-                        Resend Code
+                        {t('resendBtn')}
                       </button>
                       <button
                         type="button"
@@ -546,7 +604,7 @@ export default function App() {
                         }}
                         className="text-gray-500 hover:text-gray-800 font-mono uppercase tracking-wider"
                       >
-                        Cancel Verify
+                        {t('returnBtn')}
                       </button>
                     </div>
 
@@ -563,12 +621,12 @@ export default function App() {
 
                     <div>
                       <label className="block text-[10px] font-mono font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                        Username Handle
+                        {t('usernameLabel')}
                       </label>
                       <input
                         type="text"
                         required={isSignUp}
-                        placeholder={isSignUp ? "e.g., AliceSmith" : "Default: Sovereign Operator"}
+                        placeholder={isSignUp ? "e.g., AliceSmith" : t('usernamePlaceholder')}
                         value={usernameInput}
                         onChange={(e) => setUsernameInput(e.target.value)}
                         className="w-full text-xs p-3 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-brand transition-all"
@@ -577,7 +635,7 @@ export default function App() {
 
                     <div>
                       <label className="block text-[10px] font-mono font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                        Email Address Handle
+                        {t('emailLabel')}
                       </label>
                       <div className="flex">
                         <input
@@ -601,9 +659,9 @@ export default function App() {
 
                     <div>
                       <label className="block text-[10px] font-mono font-bold text-gray-600 uppercase tracking-widest mb-1.5 flex justify-between">
-                        <span>Cryptographic Passkey / Password</span>
+                        <span>{t('passwordLabel')}</span>
                         <span className="text-[9px] text-orange-brand font-semibold lowercase tracking-normal">
-                          locally encrypted
+                          {t('locallyEncrypted')}
                         </span>
                       </label>
                       <div className="relative">
@@ -628,7 +686,7 @@ export default function App() {
                       {isSignUp && passwordInput && (
                         <div className="mt-2.5 p-3.5 bg-gray-50 border border-gray-200 rounded-xl space-y-2.5 transition-all duration-300">
                           <div className="flex items-center justify-between text-[10px]">
-                            <span className="font-mono text-gray-500 uppercase tracking-wider font-bold">Key Signature Strength:</span>
+                            <span className="font-mono text-gray-500 uppercase tracking-wider font-bold">{t('keyStrength')}:</span>
                             <span className={`font-mono font-black uppercase tracking-wider text-[11px] ${
                               strengthScore === 1 ? 'text-rose-600 animate-pulse' :
                               strengthScore === 2 ? 'text-amber-600' :
@@ -691,7 +749,7 @@ export default function App() {
                           className="mt-0.5 rounded text-orange-brand focus:ring-orange-brand border-gray-300"
                         />
                         <label htmlFor="terms" className="text-[11px] text-gray-600 leading-normal">
-                          I consent to sync my node security hash credentials across connected UTube network applications under CommandNexus security guidelines.
+                          {t('termsConsent')}
                         </label>
                       </div>
                     )}
@@ -702,7 +760,7 @@ export default function App() {
                       className="w-full mt-2 py-3 bg-orange-trans hover:bg-orange-brand/20 text-orange-brand border border-orange-brand/30 rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all duration-300 shadow-sm hover:shadow flex items-center justify-center gap-2"
                     >
                       <span>
-                        {isSignUp ? "Deploy Secure Mailbox Node" : "Access Mailbox"}
+                        {isSignUp ? t('signUpBtn') : t('signInBtn')}
                       </span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
@@ -726,13 +784,13 @@ export default function App() {
         <section id="sandbox-sandbox-panel" className="scroll-mt-24 space-y-6">
           <div className="border-l-4 border-orange-brand pl-4">
             <span className="text-[11px] font-mono font-extrabold text-orange-brand uppercase tracking-wider block">
-              Active Visual Sandboxing
+              {t('activeSandboxing')}
             </span>
             <h2 className="text-xl sm:text-2xl font-display font-black text-gray-900 tracking-tight">
-              User Dashboard & Settings Preview Panel
+              {t('dashboardTitle')}
             </h2>
             <p className="text-gray-700 text-xs sm:text-sm mt-1 leading-relaxed">
-              Experience the layout first-hand. Change account settings, customize theme gradients, and toggle security tiers using the live preview canvas below.
+              {t('dashboardSub')}
             </p>
           </div>
 

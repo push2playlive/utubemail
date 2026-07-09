@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Settings, 
   User, 
@@ -17,9 +17,24 @@ import {
   Key, 
   Sparkles,
   AlertTriangle,
-  UserCheck
+  UserCheck,
+  Activity,
+  Globe,
+  RefreshCw,
+  Terminal
 } from 'lucide-react';
 import { UserProfile, Email } from '../types';
+
+export interface SecurityLog {
+  id: string;
+  event: string;
+  status: 'success' | 'warning' | 'blocked';
+  ipAddress: string;
+  location: string;
+  timestamp: string;
+  fingerprint: string;
+  device: string;
+}
 
 interface DashboardPreviewProps {
   currentTier: 'standard' | 'premium';
@@ -34,7 +49,7 @@ export const DashboardPreview: React.FC<DashboardPreviewProps> = ({
   userProfile,
   onUpdateProfile
 }) => {
-  const [activeTab, setActiveTab] = useState<'mailbox' | 'settings' | 'profile' | 'theme'>('mailbox');
+  const [activeTab, setActiveTab] = useState<'mailbox' | 'settings' | 'profile' | 'theme' | 'security-log'>('mailbox');
   const [draftSubject, setDraftSubject] = useState('');
   const [draftBody, setDraftBody] = useState('');
   const [emails, setEmails] = useState<Email[]>([
@@ -80,6 +95,81 @@ export const DashboardPreview: React.FC<DashboardPreviewProps> = ({
   ]);
 
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
+
+  const [securityLogs, setSecurityLogs] = useState<SecurityLog[]>([
+    {
+      id: 'log-1',
+      event: 'Cryptographic Handshake Signed',
+      status: 'success',
+      ipAddress: '192.168.1.144',
+      location: 'Stockholm, SE (Nexus Edge)',
+      timestamp: 'Just now',
+      fingerprint: 'SHA256:09ae38...c8f1',
+      device: 'macOS Core / Safari 18'
+    },
+    {
+      id: 'log-2',
+      event: 'Successful Session Key Exchange',
+      status: 'success',
+      ipAddress: '172.56.21.90',
+      location: 'Tokyo, JP (Central Relay)',
+      timestamp: '5 mins ago',
+      fingerprint: 'SHA256:88bc23...3a2f',
+      device: 'NexusMobile App / iOS'
+    },
+    {
+      id: 'log-3',
+      event: 'Blocked Cross-Node Authorisation',
+      status: 'blocked',
+      ipAddress: '83.219.14.5',
+      location: 'Kiev, UA (Untrusted Proxy)',
+      timestamp: '2 hours ago',
+      fingerprint: 'SIGN_ERR: INVALID_MAC',
+      device: 'Unknown HTTP Client'
+    },
+    {
+      id: 'log-4',
+      event: 'Automatic Key Rotation Triggered',
+      status: 'success',
+      ipAddress: '127.0.0.1 (Loopback)',
+      location: 'CommandNexus Central',
+      timestamp: '1 day ago',
+      fingerprint: 'SHA256:df4912...e3bb',
+      device: 'Nexus Daemon Core'
+    }
+  ]);
+
+  useEffect(() => {
+    const events = [
+      { event: 'Node Heartbeat Acknowledged', status: 'success', location: 'Frankfurt, DE (Enclave node)', device: 'Daemon core v2.8' },
+      { event: 'Key Session Re-verification', status: 'success', location: 'Singapore, SG (East node)', device: 'Chrome / Linux Edge' },
+      { event: 'Dynamic Key Rotation Signed', status: 'success', location: 'London, UK (Sovereign node)', device: 'NexusMobile v1.4' },
+      { event: 'Cross-Node Authentication Attempt', status: 'warning', location: 'Unknown Proxy, HK', device: 'curl/7.68.0 API' }
+    ];
+
+    const interval = setInterval(() => {
+      const rawEvent = events[Math.floor(Math.random() * events.length)];
+      const randomIP = `185.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
+      const randomHex = Math.random().toString(16).substring(2, 8);
+      const now = new Date();
+      const timestamp = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      const newLog: SecurityLog = {
+        id: `log-sim-${Date.now()}`,
+        event: rawEvent.event,
+        status: rawEvent.status as 'success' | 'warning' | 'blocked',
+        ipAddress: randomIP,
+        location: rawEvent.location,
+        timestamp: `${timestamp} (Live Signal)`,
+        fingerprint: `SHA256:${randomHex}...e102`,
+        device: rawEvent.device
+      };
+
+      setSecurityLogs(prev => [newLog, ...prev.slice(0, 9)]);
+    }, 12000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Background style styles
   const getBgStyleClass = () => {
@@ -241,6 +331,21 @@ export const DashboardPreview: React.FC<DashboardPreviewProps> = ({
             >
               <Palette className="w-4 h-4" />
               <span>UI Theme Customizer</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('security-log')}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 text-left ${
+                activeTab === 'security-log'
+                  ? 'bg-orange-trans text-orange-brand font-bold border-l-4 border-orange-brand'
+                  : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+              }`}
+            >
+              <Activity className="w-4 h-4" />
+              <span>Security Activity Log</span>
+              <span className="ml-auto text-[9px] bg-orange-brand/10 text-orange-brand font-mono font-bold px-1.5 py-0.2 rounded uppercase animate-pulse">
+                LIVE
+              </span>
             </button>
           </div>
 
@@ -729,6 +834,148 @@ export const DashboardPreview: React.FC<DashboardPreviewProps> = ({
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 5: SECURITY ACTIVITY LOG */}
+            {activeTab === 'security-log' && (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
+                  <div>
+                    <h4 className="text-sm font-display font-extrabold text-gray-900 uppercase tracking-tight flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-orange-brand animate-pulse" />
+                      Security Activity Log
+                    </h4>
+                    <p className="text-xs text-gray-600 mt-1 leading-normal">
+                      Monitor real-time cryptographic handshakes, secure node logins, and proxy authorization attempts.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const randomIP = `185.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
+                        const randomHex = Math.random().toString(16).substring(2, 8);
+                        const now = new Date();
+                        const timestamp = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+                        const newLog: SecurityLog = {
+                          id: `log-sim-${Date.now()}`,
+                          event: 'Manual Signature Handshake Signed',
+                          status: 'success',
+                          ipAddress: randomIP,
+                          location: 'Berlin, DE (Edge Node)',
+                          timestamp: `${timestamp} (Manual)`,
+                          fingerprint: `SHA256:${randomHex}...f932`,
+                          device: 'Chrome v126 (Sovereign Core)'
+                        };
+                        setSecurityLogs(prev => [newLog, ...prev]);
+                      }}
+                      className="px-2.5 py-1.5 bg-orange-brand text-white font-mono text-[10px] font-bold uppercase rounded-lg hover:bg-orange-brand/90 transition-all flex items-center gap-1 shadow-xs cursor-pointer select-none"
+                    >
+                      <Sparkles className="w-3 h-3 text-white" />
+                      Inject Handshake Signal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSecurityLogs([])}
+                      className="px-2.5 py-1.5 bg-gray-100 text-gray-600 hover:text-gray-900 font-mono text-[10px] uppercase rounded-lg hover:bg-gray-200 transition-all cursor-pointer select-none"
+                    >
+                      Clear Logs
+                    </button>
+                  </div>
+                </div>
+
+                {/* Dashboard Stats */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                    <span className="text-[9px] text-gray-500 font-mono uppercase tracking-wider block">Integrity Ratio</span>
+                    <span className="text-sm font-bold font-display text-emerald-600 block mt-0.5">100.0% Protected</span>
+                  </div>
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                    <span className="text-[9px] text-gray-500 font-mono uppercase tracking-wider block">Recorded Signals</span>
+                    <span className="text-sm font-bold font-display text-gray-900 block mt-0.5">{securityLogs.length} Events</span>
+                  </div>
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                    <span className="text-[9px] text-gray-500 font-mono uppercase tracking-wider block">Intercepted Relays</span>
+                    <span className="text-sm font-bold font-display text-rose-600 block mt-0.5">
+                      {securityLogs.filter(l => l.status === 'blocked').length} Terminated
+                    </span>
+                  </div>
+                </div>
+
+                {/* Log Feed */}
+                {securityLogs.length === 0 ? (
+                  <div className="py-12 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                    <Terminal className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-xs font-mono text-gray-500">Security buffer cleared. Awaiting live telemetry signals...</p>
+                  </div>
+                ) : (
+                  <div className="border border-gray-200 rounded-xl overflow-hidden shadow-xs">
+                    <div className="bg-gray-50 px-3 py-2 border-b border-gray-200 grid grid-cols-12 gap-2 text-[9px] font-mono text-gray-500 uppercase tracking-wider font-bold">
+                      <div className="col-span-4">Event Signature & Status</div>
+                      <div className="col-span-3">Network Location</div>
+                      <div className="col-span-2">IP Address</div>
+                      <div className="col-span-3">Handshake Timestamp</div>
+                    </div>
+                    <div className="divide-y divide-gray-100 bg-white max-h-[320px] overflow-y-auto">
+                      {securityLogs.map((log) => (
+                        <div key={log.id} className="p-3 grid grid-cols-12 gap-2 items-center hover:bg-gray-50/70 transition-all">
+                          {/* Event & Status Column */}
+                          <div className="col-span-4 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full shrink-0 ${
+                                log.status === 'success' ? 'bg-emerald-500' :
+                                log.status === 'warning' ? 'bg-amber-500' : 'bg-rose-500'
+                              }`} />
+                              <span className="text-xs font-bold text-gray-900 truncate">
+                                {log.event}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-mono text-gray-500 block pl-4 truncate">
+                              {log.fingerprint}
+                            </span>
+                          </div>
+
+                          {/* Location Column */}
+                          <div className="col-span-3 min-w-0">
+                            <div className="flex items-center gap-1.5 text-xs text-gray-700 font-medium">
+                              <Globe className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                              <span className="truncate">{log.location}</span>
+                            </div>
+                            <span className="text-[10px] text-gray-400 truncate block pl-5 font-mono">
+                              {log.device}
+                            </span>
+                          </div>
+
+                          {/* IP Column */}
+                          <div className="col-span-2">
+                            <code className="text-[10px] font-mono bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded text-gray-700">
+                              {log.ipAddress}
+                            </code>
+                          </div>
+
+                          {/* Timestamp Column */}
+                          <div className="col-span-3 text-right">
+                            <span className="text-[11px] font-mono font-bold text-gray-600 block">
+                              {log.timestamp}
+                            </span>
+                            <span className="text-[9px] font-mono uppercase text-gray-400 block tracking-widest">
+                              {log.status === 'success' ? 'VERIFIED' : log.status === 'warning' ? 'ALERTED' : 'BLOCKED'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-3 bg-orange-brand/[0.02] border border-orange-brand/20 rounded-xl flex items-start gap-2.5">
+                  <ShieldCheck className="w-4.5 h-4.5 text-orange-brand shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-gray-600 leading-normal">
+                    <strong>Cryptographic Node Synchronization:</strong> All network events are securely broadcast over authenticated WebSockets. Handshake records are stored inside your browser sandbox and synchronized dynamically with the CommandNexus key ledger.
+                  </p>
                 </div>
               </div>
             )}
