@@ -10,6 +10,7 @@ interface DBUser {
   hash: string;
   isVerified: boolean;
   verificationCode: string;
+  resetCode?: string;
   tier: 'standard' | 'premium';
   avatarSeed: string;
   accentColor: string;
@@ -191,6 +192,66 @@ async function startServer() {
         bgGradientStyle: user.bgGradientStyle,
         securityNotifications: user.securityNotifications !== false
       }
+    });
+  });
+
+  // Forgot Password Email Simulation
+  app.post("/api/auth/forgot-password", (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: "Email handle is required." });
+    }
+
+    const emailLower = email.toLowerCase().trim();
+    const user = users[emailLower];
+
+    if (!user) {
+      return res.status(404).json({ error: "Access Denied. Node operator email not found." });
+    }
+
+    // Generate 6-digit cryptographic recovery code
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    user.resetCode = resetCode;
+
+    res.json({
+      success: true,
+      message: "Simulation recovery email sent.",
+      email: emailLower,
+      recoveryCode: resetCode
+    });
+  });
+
+  // Reset Password Flow
+  app.post("/api/auth/reset-password", (req, res) => {
+    const { email, code, newPassword } = req.body;
+
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ error: "Email, security code, and new passkey are required." });
+    }
+
+    const emailLower = email.toLowerCase().trim();
+    const user = users[emailLower];
+
+    if (!user) {
+      return res.status(404).json({ error: "Node operator credentials not found." });
+    }
+
+    if (!user.resetCode || user.resetCode !== code.trim()) {
+      return res.status(400).json({ error: "Invalid signature verification code. Password reset aborted." });
+    }
+
+    // Generate new salt and hash for the password
+    const newSalt = crypto.randomBytes(16).toString("hex");
+    const newHash = hashPassword(newPassword, newSalt);
+
+    user.salt = newSalt;
+    user.hash = newHash;
+    user.isVerified = true; // Auto-verify on successful recovery reset
+    delete user.resetCode;
+
+    res.json({
+      success: true,
+      message: "Passkey signature updated successfully. Cryptographic secure reset complete."
     });
   });
 

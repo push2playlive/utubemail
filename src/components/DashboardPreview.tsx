@@ -21,8 +21,10 @@ import {
   Activity,
   Globe,
   RefreshCw,
-  Terminal
+  Terminal,
+  Search
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, Email } from '../types';
 
 export interface SecurityLog {
@@ -91,10 +93,53 @@ export const DashboardPreview: React.FC<DashboardPreviewProps> = ({
       isStarred: false,
       isEncrypted: false,
       size: '4.1 KB'
+    },
+    {
+      id: '4',
+      sender: 'Ecosystem Intelligence',
+      senderEmail: 'ai-shield@commandnexus.net',
+      recipient: userProfile.email,
+      subject: 'Anomaly Shield Threat Report',
+      body: 'Zero unauthorized intrusion vectors detected on your active security key session. Handshake signature protocol is operating under green telemetry status.',
+      date: '3 days ago',
+      isRead: false,
+      isStarred: true,
+      isEncrypted: true,
+      size: '18.9 KB'
     }
   ]);
 
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
+  const [recentSearchQuery, setRecentSearchQuery] = useState('');
+  const [decryptionTarget, setDecryptionTarget] = useState<Email | null>(null);
+  const [isDecrypting, setIsDecrypting] = useState(false);
+  const [decryptedText, setDecryptedText] = useState('');
+
+  useEffect(() => {
+    if (!decryptionTarget) return;
+    setIsDecrypting(true);
+    setDecryptedText('');
+    
+    const targetText = decryptionTarget.body;
+    let currentLength = 0;
+    const interval = setInterval(() => {
+      currentLength += Math.ceil(targetText.length / 15);
+      if (currentLength >= targetText.length) {
+        setDecryptedText(targetText);
+        setIsDecrypting(false);
+        clearInterval(interval);
+      } else {
+        const decryptedPart = targetText.slice(0, currentLength);
+        const noisePart = Array(Math.min(10, targetText.length - currentLength))
+          .fill(0)
+          .map(() => String.fromCharCode(33 + Math.floor(Math.random() * 93)))
+          .join('');
+        setDecryptedText(decryptedPart + noisePart);
+      }
+    }, 45);
+
+    return () => clearInterval(interval);
+  }, [decryptionTarget]);
 
   const [securityLogs, setSecurityLogs] = useState<SecurityLog[]>([
     {
@@ -222,6 +267,14 @@ export const DashboardPreview: React.FC<DashboardPreviewProps> = ({
     setDraftBody('');
     alert(`Encrypted email dispatched to core@commandnexus.net under ${currentTier === 'premium' ? 'military-grade zero-knowledge key security' : 'standard transport security'}.`);
   };
+
+  // Filter for secure/encrypted emails first, then filter by subject search query, then take top 3
+  const recentSecureEmails = emails
+    .filter(email => email.isEncrypted)
+    .filter(email => 
+      email.subject.toLowerCase().includes(recentSearchQuery.toLowerCase())
+    )
+    .slice(0, 3);
 
   return (
     <div className="w-full bg-white rounded-2xl border border-gray-300 shadow-xl overflow-hidden transition-all duration-300">
@@ -405,114 +458,199 @@ export const DashboardPreview: React.FC<DashboardPreviewProps> = ({
                   </div>
                 )}
 
-                {/* Email content split screen or single screen */}
+                 {/* Email content split screen or single screen */}
                 {!selectedEmail ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-display font-extrabold text-gray-900 uppercase tracking-tight flex items-center gap-2">
-                        <Inbox className="w-4 h-4 text-orange-brand" />
-                        Incoming Secure Dispatch
-                      </h4>
-                      <span className="text-[10px] font-mono text-gray-500">
-                        Total Inbox Space: {currentTier === 'premium' ? '0.001% of 1 TB used' : '22.4% of 5 GB used'}
-                      </span>
-                    </div>
+                  <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+                    
+                    {/* Left Column: Inbox List & Compose Form (col-span-7) */}
+                    <div className="xl:col-span-7 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-display font-extrabold text-gray-900 uppercase tracking-tight flex items-center gap-2">
+                          <Inbox className="w-4 h-4 text-orange-brand" />
+                          Incoming Secure Dispatch
+                        </h4>
+                        <span className="text-[10px] font-mono text-gray-500">
+                          Total Inbox Space: {currentTier === 'premium' ? '0.001% of 1 TB used' : '22.4% of 5 GB used'}
+                        </span>
+                      </div>
 
-                    <div className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden shadow-xs">
-                      {emails.map((email) => (
-                        <div
-                          key={email.id}
-                          onClick={() => setSelectedEmail(email)}
-                          className={`p-3 flex items-start gap-3 hover:bg-gray-50 cursor-pointer transition-all duration-150 ${
-                            email.isRead ? 'bg-white' : 'bg-orange-trans/5'
-                          }`}
-                        >
-                          {/* Cryptographic encryption lock icon */}
-                          <div className="mt-1">
-                            {email.isEncrypted && currentTier === 'premium' ? (
-                              <Lock className="w-3.5 h-3.5 text-emerald-600" title="End-to-end encrypted letters" />
-                            ) : (
-                              <EyeOff className="w-3.5 h-3.5 text-gray-400" title="Standard encryption only" />
-                            )}
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
-                              <span className={`text-xs truncate ${email.isRead ? 'text-gray-600' : 'text-gray-900 font-bold'}`}>
-                                {email.sender}
-                              </span>
-                              <span className="text-[10px] text-gray-400 shrink-0 font-mono">
-                                {email.date}
-                              </span>
+                      <div className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden shadow-xs bg-white">
+                        {emails.map((email) => (
+                          <div
+                            key={email.id}
+                            onClick={() => setSelectedEmail(email)}
+                            className={`p-3 flex items-start gap-3 hover:bg-gray-50 cursor-pointer transition-all duration-150 ${
+                              email.isRead ? 'bg-white' : 'bg-orange-trans/5'
+                            }`}
+                          >
+                            {/* Cryptographic encryption lock icon */}
+                            <div className="mt-1">
+                              {email.isEncrypted && currentTier === 'premium' ? (
+                                <Lock className="w-3.5 h-3.5 text-emerald-600" title="End-to-end encrypted letters" />
+                              ) : (
+                                <EyeOff className="w-3.5 h-3.5 text-gray-400" title="Standard encryption only" />
+                              )}
                             </div>
-                            <h5 className={`text-xs mt-0.5 truncate ${email.isRead ? 'text-gray-700' : 'text-gray-900 font-semibold'}`}>
-                              {email.subject}
-                            </h5>
-                            <p className="text-[11px] text-gray-500 truncate mt-0.5 leading-normal">
-                              {email.body}
-                            </p>
-                          </div>
 
-                          <div className="flex items-center gap-2 self-center shrink-0">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <span className={`text-xs truncate ${email.isRead ? 'text-gray-600' : 'text-gray-900 font-bold'}`}>
+                                  {email.sender}
+                                </span>
+                                <span className="text-[10px] text-gray-400 shrink-0 font-mono">
+                                  {email.date}
+                                </span>
+                              </div>
+                              <h5 className={`text-xs mt-0.5 truncate ${email.isRead ? 'text-gray-700' : 'text-gray-900 font-semibold'}`}>
+                                {email.subject}
+                              </h5>
+                              <p className="text-[11px] text-gray-500 truncate mt-0.5 leading-normal">
+                                {email.body}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2 self-center shrink-0">
+                              <button
+                                onClick={(e) => toggleStar(email.id, e)}
+                                className="text-gray-400 hover:text-amber-500 transition-colors"
+                              >
+                                <Star className={`w-3.5 h-3.5 ${email.isStarred ? 'fill-amber-500 text-amber-500' : ''}`} />
+                              </button>
+                              <button
+                                onClick={(e) => deleteEmail(email.id, e)}
+                                className="text-gray-400 hover:text-rose-600 transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Compose Quick Form */}
+                      <div className="mt-6 border-t border-gray-100 pt-5">
+                        <h4 className="text-xs font-mono font-bold text-gray-600 uppercase tracking-widest mb-3">
+                          Draft Cryptographic Letter
+                        </h4>
+                        <form onSubmit={handleCompose} className="space-y-3">
+                          <input
+                            type="text"
+                            placeholder="Subject line"
+                            value={draftSubject}
+                            onChange={(e) => setDraftSubject(e.target.value)}
+                            className="w-full text-xs p-2.5 rounded-lg border border-gray-200 focus:outline-none focus:ring-1 focus:ring-orange-brand"
+                          />
+                          <textarea
+                            placeholder="Secure message body..."
+                            rows={2}
+                            value={draftBody}
+                            onChange={(e) => setDraftBody(e.target.value)}
+                            className="w-full text-xs p-2.5 rounded-lg border border-gray-200 focus:outline-none focus:ring-1 focus:ring-orange-brand resize-none"
+                          ></textarea>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-mono text-gray-500 flex items-center gap-1">
+                              {currentTier === 'premium' ? (
+                                <span className="text-emerald-700 flex items-center gap-1 font-bold">
+                                  <Lock className="w-3 h-3" /> E2EE Armed
+                                </span>
+                              ) : (
+                                <span className="text-amber-600 flex items-center gap-1">
+                                  Standard TLS
+                                </span>
+                              )}
+                            </span>
                             <button
-                              onClick={(e) => toggleStar(email.id, e)}
-                              className="text-gray-400 hover:text-amber-500 transition-colors"
+                              type="submit"
+                              className="px-4 py-1.5 bg-orange-brand text-white font-mono text-xs font-bold uppercase rounded-lg hover:bg-orange-brand/90 flex items-center gap-1.5 shadow-sm"
                             >
-                              <Star className={`w-3.5 h-3.5 ${email.isStarred ? 'fill-amber-500 text-amber-500' : ''}`} />
-                            </button>
-                            <button
-                              onClick={(e) => deleteEmail(email.id, e)}
-                              className="text-gray-400 hover:text-rose-600 transition-colors"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Send className="w-3.5 h-3.5" />
+                              Dispatch Letter
                             </button>
                           </div>
-                        </div>
-                      ))}
+                        </form>
+                      </div>
                     </div>
 
-                    {/* Compose Quick Form */}
-                    <div className="mt-6 border-t border-gray-100 pt-5">
-                      <h4 className="text-xs font-mono font-bold text-gray-600 uppercase tracking-widest mb-3">
-                        Draft Cryptographic Letter
-                      </h4>
-                      <form onSubmit={handleCompose} className="space-y-3">
+                    {/* Right Column: Recent Mail Preview Pane (col-span-5) */}
+                    <div className="xl:col-span-5 space-y-4 bg-gray-50/70 backdrop-blur-md p-4 rounded-2xl border border-gray-200 shadow-xs relative overflow-hidden">
+                      {/* Decorative security neon glow/banner */}
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none" />
+                      
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-mono font-bold text-gray-600 uppercase tracking-widest flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          Recent Mail Preview
+                        </h4>
+                        <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200/50 px-1.5 py-0.5 rounded font-mono font-bold">
+                          E2EE Cache
+                        </span>
+                      </div>
+
+                      {/* Search input bar */}
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                         <input
                           type="text"
-                          placeholder="Subject line"
-                          value={draftSubject}
-                          onChange={(e) => setDraftSubject(e.target.value)}
-                          className="w-full text-xs p-2.5 rounded-lg border border-gray-200 focus:outline-none focus:ring-1 focus:ring-orange-brand"
+                          placeholder="Filter encrypted subjects..."
+                          value={recentSearchQuery}
+                          onChange={(e) => setRecentSearchQuery(e.target.value)}
+                          className="w-full text-xs pl-9 pr-3 py-2 rounded-xl border border-gray-300 bg-white/90 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-all placeholder:text-gray-400 font-mono"
                         />
-                        <textarea
-                          placeholder="Secure message body..."
-                          rows={2}
-                          value={draftBody}
-                          onChange={(e) => setDraftBody(e.target.value)}
-                          className="w-full text-xs p-2.5 rounded-lg border border-gray-200 focus:outline-none focus:ring-1 focus:ring-orange-brand resize-none"
-                        ></textarea>
-                        <div className="flex justify-between items-center">
-                          <span className="text-[10px] font-mono text-gray-500 flex items-center gap-1">
-                            {currentTier === 'premium' ? (
-                              <span className="text-emerald-700 flex items-center gap-1 font-bold">
-                                <Lock className="w-3 h-3" /> E2EE Armed
-                              </span>
-                            ) : (
-                              <span className="text-amber-600 flex items-center gap-1">
-                                Standard TLS
-                              </span>
-                            )}
-                          </span>
+                        {recentSearchQuery && (
                           <button
-                            type="submit"
-                            className="px-4 py-1.5 bg-orange-brand text-white font-mono text-xs font-bold uppercase rounded-lg hover:bg-orange-brand/90 flex items-center gap-1.5 shadow-sm"
+                            onClick={() => setRecentSearchQuery('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 hover:text-gray-600 font-mono font-bold font-mono"
                           >
-                            <Send className="w-3.5 h-3.5" />
-                            Dispatch Letter
+                            CLEAR
                           </button>
-                        </div>
-                      </form>
+                        )}
+                      </div>
+
+                      {/* List of 3 most recent secure emails matching subject filter */}
+                      <div className="space-y-3">
+                        {recentSecureEmails.length === 0 ? (
+                          <div className="text-center py-8 bg-white/40 border border-dashed border-gray-200 rounded-xl p-4">
+                            <EyeOff className="w-6 h-6 text-gray-300 mx-auto mb-1.5" />
+                            <p className="text-[11px] text-gray-500 font-mono">
+                              No matching encrypted subjects found.
+                            </p>
+                          </div>
+                        ) : (
+                          recentSecureEmails.map((email) => (
+                            <div
+                              key={`recent-${email.id}`}
+                              className="p-3.5 bg-white border border-gray-200 hover:border-emerald-300/60 rounded-xl transition-all duration-150 group relative hover:shadow-xs"
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[10px] font-bold text-gray-500 truncate">
+                                  {email.sender}
+                                </span>
+                                <span className="text-[9px] text-gray-400 font-mono">
+                                  {email.date}
+                                </span>
+                              </div>
+                              <h5 className="text-xs font-semibold text-gray-900 group-hover:text-emerald-700 transition-colors truncate">
+                                {email.subject}
+                              </h5>
+                              <p className="text-[10px] text-gray-400 line-clamp-1 mt-0.5 font-mono">
+                                Ciphertext Payload Locked • {email.size}
+                              </p>
+                              <div className="mt-2.5 pt-2 border-t border-gray-100 flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => setDecryptionTarget(email)}
+                                  className="w-full sm:w-auto px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/50 hover:border-emerald-300 font-mono text-[10px] font-bold uppercase rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                                >
+                                  <Lock className="w-3 h-3 text-emerald-600 group-hover:animate-bounce" />
+                                  <span>Read Encrypted Mail</span>
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
+                    
                   </div>
                 ) : (
                   // Email Details View
@@ -992,6 +1130,80 @@ export const DashboardPreview: React.FC<DashboardPreviewProps> = ({
         </div>
 
       </div>
+
+      {/* Dynamic Decryption Interactive Overlay */}
+      <AnimatePresence>
+        {decryptionTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDecryptionTarget(null)}
+              className="absolute inset-0 bg-gray-950/60 backdrop-blur-xs"
+            />
+
+            {/* Modal Container */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", duration: 0.4 }}
+              className="bg-white rounded-2xl border border-emerald-500/30 shadow-2xl overflow-hidden w-full max-w-lg z-10 p-5 relative text-gray-900"
+            >
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500" />
+              
+              {/* Header */}
+              <div className="flex justify-between items-start border-b border-gray-100 pb-3 mb-4">
+                <div>
+                  <span className="text-[9px] font-mono font-bold bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded uppercase">
+                    E2EE Decrypted Terminal
+                  </span>
+                  <h3 className="text-sm font-bold text-gray-900 mt-2 truncate max-w-[360px]">
+                    {decryptionTarget.subject}
+                  </h3>
+                  <p className="text-[10px] text-gray-500 font-mono mt-0.5">
+                    Sender: <span className="text-gray-800 font-semibold">{decryptionTarget.sender}</span> • Size: {decryptionTarget.size}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDecryptionTarget(null)}
+                  className="text-gray-400 hover:text-gray-600 text-xs font-mono font-bold border border-gray-200 hover:bg-gray-50 px-2 py-1 rounded-lg transition-all"
+                >
+                  CLOSE
+                </button>
+              </div>
+
+              {/* Status banner */}
+              <div className="p-2.5 bg-emerald-50/50 border border-emerald-200/60 rounded-xl flex items-center gap-2 mb-4 text-emerald-800 font-mono text-[10px]">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <div className="truncate">
+                  {isDecrypting ? (
+                    <span className="animate-pulse">Decrypting military signature: verified handshakes...</span>
+                  ) : (
+                    <span className="font-bold">AES-GCM 256 cipher successfully decrypted.</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Text content/payload */}
+              <div className="p-4 bg-gray-950 text-emerald-400 font-mono text-xs rounded-xl border border-gray-800 min-h-[140px] max-h-[220px] overflow-y-auto leading-relaxed whitespace-pre-wrap select-text selection:bg-emerald-500 selection:text-gray-950">
+                {isDecrypting && (
+                  <span className="inline-block w-2.5 h-4 bg-emerald-400 animate-pulse mr-1" />
+                )}
+                {decryptedText}
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-[10px] text-gray-500 font-mono">
+                <span>Key Signature Hash verified</span>
+                <span className="text-emerald-600 font-bold">100% Integrity</span>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

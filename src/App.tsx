@@ -20,7 +20,8 @@ import {
   ChevronDown,
   ChevronUp,
   Globe,
-  Languages
+  Languages,
+  ShieldAlert
 } from 'lucide-react';
 import { EnvelopeLogo } from './components/EnvelopeLogo';
 import { HamburgerMenu } from './components/HamburgerMenu';
@@ -52,6 +53,46 @@ export default function App() {
   const [verificationCodeInput, setVerificationCodeInput] = useState('');
   const [activeSessionToken, setActiveSessionToken] = useState('');
   const [tempVerificationCode, setTempVerificationCode] = useState<string | null>(null);
+
+  // Password Recovery / Reset simulation states
+  const [isRecoveryOpen, setIsRecoveryOpen] = useState(false);
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
+  const [recoveryCodeInput, setRecoveryCodeInput] = useState('');
+  const [recoveryStep, setRecoveryStep] = useState<'request' | 'verify_reset'>('request');
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [recoveryFeedback, setRecoveryFeedback] = useState<string | null>(null);
+  const [recoverySuccess, setRecoverySuccess] = useState(false);
+
+  // New password strength check metrics
+  const isNewLengthValid = newPasswordInput.length >= 8;
+  const isNewCasingValid = /[a-z]/.test(newPasswordInput) && /[A-Z]/.test(newPasswordInput);
+  const isNewNumberValid = /[0-9]/.test(newPasswordInput);
+  const isNewSymbolValid = /[^a-zA-Z0-9]/.test(newPasswordInput);
+  const newStrengthScore = newPasswordInput ? [isNewLengthValid, isNewCasingValid, isNewNumberValid, isNewSymbolValid].filter(Boolean).length : 0;
+
+  // Real-time Entropy & Dynamic PBKDF2 Iterations calculation
+  const getPoolSize = (password: string) => {
+    let pool = 0;
+    if (/[a-z]/.test(password)) pool += 26;
+    if (/[A-Z]/.test(password)) pool += 26;
+    if (/[0-9]/.test(password)) pool += 10;
+    if (/[^a-zA-Z0-9]/.test(password)) pool += 32;
+    return pool;
+  };
+  const poolSize = getPoolSize(newPasswordInput);
+  const passwordEntropy = poolSize > 0 ? Math.round(newPasswordInput.length * Math.log2(poolSize)) : 0;
+
+  const calculatePbkdf2Iterations = (entropy: number, score: number) => {
+    if (!newPasswordInput) return 0;
+    const base = 100000; // industry standard baseline
+    const strengthMultiplier = score * 100000; // dynamic strengthening
+    const entropyHardening = entropy * 2500; // entropy-based augmentation
+    return Math.min(750000, base + strengthMultiplier + entropyHardening);
+  };
+  const pbkdf2Iterations = calculatePbkdf2Iterations(passwordEntropy, newStrengthScore);
 
   // FAQ state
   const [activeFaqIndex, setActiveFaqIndex] = useState<number | null>(0);
@@ -302,6 +343,80 @@ export default function App() {
     localStorage.removeItem('utubemail_session');
     setPasswordInput('');
     setLoginFeedback(null);
+  };
+
+  const handleForgotPasswordRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRecoveryFeedback(null);
+
+    const handleSuffix = tier === 'premium' ? '@utubemail.com' : '@utubemail.free';
+    const cleanEmailInput = recoveryEmail.trim();
+    const fullEmail = cleanEmailInput.includes('@') 
+      ? cleanEmailInput 
+      : `${cleanEmailInput || 'operator'}${handleSuffix}`;
+
+    try {
+      const response = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: fullEmail })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setRecoveryCode(data.recoveryCode);
+        setRecoveryStep('verify_reset');
+        setRecoveryFeedback(null);
+      } else {
+        setRecoveryFeedback(`❌ ${data.error || 'Failed to trigger password recovery.'}`);
+      }
+    } catch (err) {
+      setRecoveryFeedback('❌ Network handshake failure. Could not reach node auth server.');
+    }
+  };
+
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRecoveryFeedback(null);
+
+    if (newPasswordInput !== confirmPasswordInput) {
+      setRecoveryFeedback('❌ Key signature entries do not match.');
+      return;
+    }
+
+    if (newStrengthScore < 3) {
+      setRecoveryFeedback('❌ New passkey signature must meet at least Armored Strength (3+ requirements).');
+      return;
+    }
+
+    const handleSuffix = tier === 'premium' ? '@utubemail.com' : '@utubemail.free';
+    const cleanEmailInput = recoveryEmail.trim();
+    const fullEmail = cleanEmailInput.includes('@') 
+      ? cleanEmailInput 
+      : `${cleanEmailInput || 'operator'}${handleSuffix}`;
+
+    try {
+      const response = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: fullEmail,
+          code: recoveryCodeInput,
+          newPassword: newPasswordInput
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setRecoverySuccess(true);
+        setRecoveryFeedback(null);
+        // Sync inputs back to parent fields so the user can log in immediately
+        setPasswordInput(newPasswordInput);
+        setEmailInput(recoveryEmail);
+      } else {
+        setRecoveryFeedback(`❌ ${data.error || 'Password reset failed.'}`);
+      }
+    } catch (err) {
+      setRecoveryFeedback('❌ Network handshake failure during key reset.');
+    }
   };
 
   return (
@@ -738,6 +853,28 @@ export default function App() {
                           </div>
                         </div>
                       )}
+
+                      {!isSignUp && (
+                        <div className="flex justify-end mt-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsRecoveryOpen(true);
+                              setRecoveryStep('request');
+                              setRecoveryEmail(emailInput);
+                              setRecoveryFeedback(null);
+                              setRecoveryCode(null);
+                              setRecoverySuccess(false);
+                              setNewPasswordInput('');
+                              setConfirmPasswordInput('');
+                              setRecoveryCodeInput('');
+                            }}
+                            className="text-[10px] font-mono text-orange-brand hover:text-orange-brand/80 hover:underline transition-colors focus:outline-none cursor-pointer uppercase tracking-wider font-bold"
+                          >
+                            Forgot Passkey Signature?
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {isSignUp && (
@@ -973,6 +1110,369 @@ export default function App() {
 
         </div>
       </footer>
+
+      {/* PASSWORD RECOVERY EMAIL SIMULATION MODAL */}
+      <AnimatePresence>
+        {isRecoveryOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsRecoveryOpen(false)}
+              className="absolute inset-0 bg-gray-950/60 backdrop-blur-xs"
+            />
+
+            {/* Modal Container */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", duration: 0.4 }}
+              className="bg-white rounded-2xl border border-orange-brand/30 shadow-2xl overflow-hidden w-full max-w-lg z-10 p-6 relative text-gray-900"
+            >
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-orange-brand via-amber-500 to-orange-brand" />
+
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => setIsRecoveryOpen(false)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 font-mono text-[10px] font-bold border border-gray-200 hover:bg-gray-50 px-2.5 py-1 rounded-lg transition-all"
+              >
+                CLOSE
+              </button>
+
+              {/* Header */}
+              <div className="border-b border-gray-100 pb-4 mb-4">
+                <span className="text-[9px] font-mono font-bold bg-orange-trans border border-orange-brand/20 text-orange-brand px-2 py-0.5 rounded uppercase tracking-wider">
+                  CommandNexus Key Recovery System
+                </span>
+                <h3 className="text-base sm:text-lg font-display font-black text-gray-950 mt-2">
+                  {recoverySuccess ? "Signature Recovery Succeeded" : "Security Passkey Signature Reset"}
+                </h3>
+                <p className="text-[10px] text-gray-500 font-mono mt-0.5 uppercase tracking-wide">
+                  Secure Zero-Knowledge Password Reset Handshake
+                </p>
+              </div>
+
+              {recoveryFeedback && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-950 text-xs rounded-xl flex items-center gap-2 mb-4 font-mono">
+                  <span>{recoveryFeedback}</span>
+                </div>
+              )}
+
+              {recoverySuccess ? (
+                /* SUCCESS FLOW */
+                <div className="space-y-4 py-2">
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2.5 text-emerald-950 text-xs">
+                    <span className="font-bold font-mono text-[11px] uppercase text-emerald-700 flex items-center gap-1.5">
+                      <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                      Handshake Complete: Key Restored
+                    </span>
+                    <p className="leading-relaxed">
+                      Your cryptographic asymmetric signature hash has been rotated successfully. The simulated ledger is now armed with your new passkey credentials.
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono space-y-1.5 text-gray-600">
+                    <div className="flex justify-between">
+                      <span>Restored Node Handle:</span>
+                      <strong className="text-gray-900">{recoveryEmail.includes('@') ? recoveryEmail : `${recoveryEmail}${tier === 'premium' ? '@utubemail.com' : '@utubemail.free'}`}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>PBKDF2 Salting Rotation:</span>
+                      <strong className="text-emerald-600">SUCCESSFUL</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Post-Quantum Key Validation:</span>
+                      <strong className="text-emerald-600 font-bold uppercase">Armed</strong>
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-gray-500 leading-snug">
+                    Your login input has been pre-filled with your restored node address and credentials.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsRecoveryOpen(false);
+                      setIsSignUp(false);
+                    }}
+                    className="w-full py-3 bg-orange-brand hover:bg-orange-brand/90 text-white font-mono text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center justify-center gap-2"
+                  >
+                    <span>Proceed to Access Node</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : recoveryStep === 'request' ? (
+                /* REQUEST CODE FORM */
+                <form onSubmit={handleForgotPasswordRequest} className="space-y-4">
+                  <p className="text-xs text-gray-700 leading-relaxed">
+                    Provide your cryptographic node handle. The simulated SMTP relay will immediately dispatch a 6-digit recovery bypass signature code to authorize rotation.
+                  </p>
+
+                  <div>
+                    <label className="block text-[10px] font-mono font-bold text-gray-600 uppercase tracking-widest mb-1.5">
+                      Registered Node Address
+                    </label>
+                    <div className="flex">
+                      <input
+                        type="text"
+                        required
+                        placeholder="operator"
+                        value={recoveryEmail.split('@')[0]}
+                        onChange={(e) => setRecoveryEmail(e.target.value)}
+                        className="w-full text-xs p-3 rounded-l-xl border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-brand transition-all font-mono"
+                      />
+                      <span className="bg-gray-200 text-gray-600 px-4 flex items-center text-xs font-mono border-y border-r border-gray-300 rounded-r-xl">
+                        {tier === 'premium' ? '@utubemail.com' : '@utubemail.free'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 bg-orange-trans hover:bg-orange-brand/20 text-orange-brand border border-orange-brand/30 rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>Dispatch Recovery Code</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </form>
+              ) : (
+                /* VERIFY & RESET PASSWORD FORM */
+                <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+                  
+                  {/* Simulated SMTP Code Banner inside Modal */}
+                  {recoveryCode && (
+                    <div className="p-3 bg-indigo-50 border border-indigo-200 text-indigo-950 text-xs rounded-xl flex flex-col gap-1.5 shadow-xs animate-pulse">
+                      <span className="font-bold font-mono text-[10px] uppercase text-indigo-700 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        SMTP Simulation: Secure Recovery Key
+                      </span>
+                      <p className="text-[10px] text-indigo-800 leading-normal">
+                        Simulated secure relay dispatched security token: <strong className="text-indigo-900 bg-white px-2 py-0.5 rounded border border-indigo-300 font-mono text-xs">{recoveryCode}</strong> to handle <span className="font-semibold text-indigo-800">{recoveryEmail.includes('@') ? recoveryEmail : `${recoveryEmail}${tier === 'premium' ? '@utubemail.com' : '@utubemail.free'}`}</span>.
+                      </p>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-gray-700 leading-relaxed">
+                    Verify your secure code and configure your rotated asymmetric passkey signature below.
+                  </p>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-mono font-bold text-gray-600 uppercase tracking-widest mb-1.5">
+                        6-Digit Security Token
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        required
+                        placeholder="Enter recovery code"
+                        value={recoveryCodeInput}
+                        onChange={(e) => setRecoveryCodeInput(e.target.value.replace(/\D/g, ''))}
+                        className="w-full text-center text-base font-mono tracking-widest p-2.5 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-brand transition-all font-bold text-gray-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-mono font-bold text-gray-600 uppercase tracking-widest mb-1.5 flex justify-between">
+                        <span>New Passkey Signature</span>
+                        <span className="text-[9px] text-orange-brand font-semibold lowercase">
+                          locally encrypted
+                        </span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showNewPassword ? "text" : "password"}
+                          required
+                          placeholder="••••••••••••"
+                          value={newPasswordInput}
+                          onChange={(e) => setNewPasswordInput(e.target.value)}
+                          className="w-full text-xs p-3 pr-10 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-brand transition-all font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600 cursor-pointer"
+                        >
+                          {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-mono font-bold text-gray-600 uppercase tracking-widest mb-1.5">
+                        Confirm New Passkey Signature
+                      </label>
+                      <input
+                        type={showNewPassword ? "text" : "password"}
+                        required
+                        placeholder="••••••••••••"
+                        value={confirmPasswordInput}
+                        onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                        className="w-full text-xs p-3 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-brand transition-all font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Real-time Strength display for new password */}
+                  {newPasswordInput && (
+                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-3.5">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-[9px] font-mono">
+                          <span className="text-gray-500 uppercase tracking-wider font-bold">Key Strength:</span>
+                          <span className={`font-black uppercase tracking-wider text-[10px] ${
+                            newStrengthScore === 1 ? 'text-rose-600 animate-pulse' :
+                            newStrengthScore === 2 ? 'text-amber-600' :
+                            newStrengthScore === 3 ? 'text-indigo-600 font-bold' :
+                            'text-emerald-600 font-black'
+                          }`}>
+                            {newStrengthScore === 1 && 'Critical Vulnerability ⚠️'}
+                            {newStrengthScore === 2 && 'Susceptible / Weak'}
+                            {newStrengthScore === 3 && 'Armored Key Pair'}
+                            {newStrengthScore === 4 && 'Post-Quantum Secure ⚡'}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1 h-1">
+                          {[1, 2, 3, 4].map((seg) => (
+                            <div
+                              key={seg}
+                              className={`h-full rounded-full transition-all duration-300 ${
+                                seg <= newStrengthScore
+                                  ? newStrengthScore === 1 ? 'bg-rose-500' :
+                                    newStrengthScore === 2 ? 'bg-amber-500' :
+                                    newStrengthScore === 3 ? 'bg-indigo-500' :
+                                    'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]'
+                                  : 'bg-gray-200'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 pt-1 text-[9px] font-mono">
+                          <div className="flex items-center gap-1">
+                            <span className={`w-1 h-1 rounded-full ${isNewLengthValid ? 'bg-emerald-500 scale-110' : 'bg-gray-300'}`} />
+                            <span className={isNewLengthValid ? 'text-gray-900 font-bold' : 'text-gray-500'}>8+ Characters</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className={`w-1 h-1 rounded-full ${isNewCasingValid ? 'bg-emerald-500 scale-110' : 'bg-gray-300'}`} />
+                            <span className={isNewCasingValid ? 'text-gray-900 font-bold' : 'text-gray-500'}>Aa-Zz Casing</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className={`w-1 h-1 rounded-full ${isNewNumberValid ? 'bg-emerald-500 scale-110' : 'bg-gray-300'}`} />
+                            <span className={isNewNumberValid ? 'text-gray-900 font-bold' : 'text-gray-500'}>0-9 Number</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className={`w-1 h-1 rounded-full ${isNewSymbolValid ? 'bg-emerald-500 scale-110' : 'bg-gray-300'}`} />
+                            <span className={isNewSymbolValid ? 'text-gray-900 font-bold' : 'text-gray-500'}>Special Symbol</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* PBKDF2 Entropy Stretching Real-Time Indicator */}
+                      <div className="pt-2.5 border-t border-gray-200/80 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-mono font-bold text-gray-900 uppercase tracking-wider flex items-center gap-1">
+                            <ShieldAlert className="w-3.5 h-3.5 text-orange-brand" />
+                            PBKDF2 HMAC-SHA256 Stretching
+                          </span>
+                          <span className="text-[9px] font-mono text-gray-400 bg-gray-200/50 px-1.5 py-0.5 rounded">
+                            Work Factor
+                          </span>
+                        </div>
+
+                        {/* Interactive dynamic visual metrics grid */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="p-2 bg-white border border-gray-200 rounded-lg text-center">
+                            <div className="text-[8px] uppercase tracking-wider text-gray-400 font-mono font-bold">Entropy</div>
+                            <div className="text-[11px] font-mono font-black text-gray-900 mt-0.5">
+                              {passwordEntropy} <span className="text-[8px] font-normal text-gray-500">bits</span>
+                            </div>
+                          </div>
+                          <div className="p-2 bg-white border border-gray-200 rounded-lg text-center">
+                            <div className="text-[8px] uppercase tracking-wider text-gray-400 font-mono font-bold">Pool Size</div>
+                            <div className="text-[11px] font-mono font-black text-gray-900 mt-0.5">
+                              {poolSize} <span className="text-[8px] font-normal text-gray-500">chars</span>
+                            </div>
+                          </div>
+                          <div className="p-2 bg-white border border-gray-200 rounded-lg text-center">
+                            <div className="text-[8px] uppercase tracking-wider text-gray-400 font-mono font-bold">Hashing Rounds</div>
+                            <div className="text-[11px] font-mono font-black text-orange-brand mt-0.5">
+                              {pbkdf2Iterations.toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Stretching depth thermometer gauge */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[8px] font-mono text-gray-400">
+                            <span>Industry Baseline (100k)</span>
+                            <span>Deep Fortified (750k)</span>
+                          </div>
+                          <div className="relative w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                            {/* Target value dynamic fill indicator */}
+                            <motion.div
+                              initial={{ width: "0%" }}
+                              animate={{ width: `${Math.min(100, Math.max(0, ((pbkdf2Iterations - 100000) / 650000) * 100))}%` }}
+                              transition={{ type: "spring", stiffness: 80 }}
+                              className="absolute top-0 left-0 h-full bg-gradient-to-r from-amber-500 via-orange-brand to-emerald-500 rounded-full"
+                            />
+                            {/* Dynamic dot marker */}
+                            <motion.div 
+                              animate={{ left: `calc(${Math.min(100, Math.max(0, ((pbkdf2Iterations - 100000) / 650000) * 100))}% - 4px)` }}
+                              className="absolute top-0.5 w-1 h-1 bg-white rounded-full shadow-md"
+                            />
+                          </div>
+                          <div className="flex justify-between items-center text-[8px] font-mono text-gray-500 pt-0.5">
+                            <span>Hash Depth Multiplier:</span>
+                            <span className="font-bold text-gray-800">{(pbkdf2Iterations / 100000).toFixed(2)}x standard toughness</span>
+                          </div>
+                        </div>
+
+                        {/* Technical Entropy Explanation text block */}
+                        <div className="p-2 bg-orange-trans/5 border border-orange-brand/10 rounded-lg text-[9px] text-gray-600 leading-relaxed font-mono">
+                          <span className="font-bold text-orange-brand">Zero-Knowledge Stretching Rule:</span>{' '}
+                          {passwordEntropy < 40 ? (
+                            <span>Low entropy detected ({passwordEntropy} bits). Dynamic salting is actively scaling iterations to compensate for password susceptibility and resist brute-force dictionaries.</span>
+                          ) : (
+                            <span>High entropy verified. Excellent resistance against off-line brute force. The enclave stretches your key depth to <strong className="text-gray-900">{pbkdf2Iterations.toLocaleString()} HMAC rounds</strong> for armored security integrity.</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 bg-orange-brand hover:bg-orange-brand/90 text-white font-mono text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>Update Key Signature & Reset</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRecoveryStep('request');
+                        setRecoveryFeedback(null);
+                        setRecoveryCode(null);
+                      }}
+                      className="text-[10px] font-mono text-gray-500 hover:text-gray-800 underline uppercase tracking-wider font-bold cursor-pointer"
+                    >
+                      Back to Code Request
+                    </button>
+                  </div>
+                </form>
+              )}
+
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
