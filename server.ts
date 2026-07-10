@@ -22,6 +22,15 @@ interface DBUser {
 const users: Record<string, DBUser> = {};
 const sessions: Record<string, string> = {}; // token -> email
 
+interface QrSession {
+  token: string;
+  status: 'pending' | 'scanned' | 'authorized' | 'rejected';
+  authorizedEmail?: string;
+  authorizedSessionToken?: string;
+  createdAt: number;
+}
+const qrSessions: Record<string, QrSession> = {};
+
 // Helper function to hash password
 function hashPassword(password: string, salt: string): string {
   return crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
@@ -329,6 +338,110 @@ async function startServer() {
         securityNotifications: user.securityNotifications !== false
       }
     });
+  });
+
+  // QR Code Initiation
+  app.post("/api/auth/qr/initiate", (req, res) => {
+    const qrToken = crypto.randomBytes(24).toString("hex");
+    qrSessions[qrToken] = {
+      token: qrToken,
+      status: 'pending',
+      createdAt: Date.now()
+    };
+    res.json({ success: true, qrToken });
+  });
+
+  // QR Code Status Check
+  app.get("/api/auth/qr/status/:token", (req, res) => {
+    const { token } = req.params;
+    const session = qrSessions[token];
+    if (!session) {
+      return res.status(404).json({ error: "QR authorization session not found or expired." });
+    }
+
+    // Sessions expire in 5 minutes
+    if (Date.now() - session.createdAt > 5 * 60 * 1000) {
+      delete qrSessions[token];
+      return res.status(410).json({ error: "QR session expired. Please generate a new QR." });
+    }
+
+    if (session.status === 'authorized' && session.authorizedEmail) {
+      const user = users[session.authorizedEmail];
+      return res.json({
+        success: true,
+        status: session.status,
+        sessionToken: session.authorizedSessionToken,
+        user: {
+          username: user.username,
+          email: user.email,
+          tier: user.tier,
+          avatarSeed: user.avatarSeed,
+          accentColor: user.accentColor,
+          bgGradientStyle: user.bgGradientStyle,
+          securityNotifications: user.securityNotifications !== false
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      status: session.status,
+      authorizedEmail: session.authorizedEmail
+    });
+  });
+
+  // QR Code Scan Simulation (from mobile app)
+  app.post("/api/auth/qr/scan", (req, res) => {
+    const { token, email } = req.body;
+    if (!token || !email) {
+      return res.status(400).json({ error: "QR token and email are required." });
+    }
+
+    const emailLower = email.toLowerCase().trim();
+    const user = users[emailLower];
+    if (!user) {
+      return res.status(404).json({ error: "Node operator email not found." });
+    }
+
+    const session = qrSessions[token];
+    if (!session) {
+      return res.status(404).json({ error: "QR authorization session not found." });
+    }
+
+    session.status = 'scanned';
+    session.authorizedEmail = emailLower;
+    res.json({ success: true, message: "QR successfully scanned on mobile. Awaiting confirmation." });
+  });
+
+  // QR Code Authorize/Reject Simulation (from mobile app)
+  app.post("/api/auth/qr/authorize", (req, res) => {
+    const { token, email, approve } = req.body;
+    if (!token || !email) {
+      return res.status(400).json({ error: "QR token and operator email are required." });
+    }
+
+    const emailLower = email.toLowerCase().trim();
+    const user = users[emailLower];
+    if (!user) {
+      return res.status(404).json({ error: "Node operator credentials not found." });
+    }
+
+    const session = qrSessions[token];
+    if (!session) {
+      return res.status(404).json({ error: "QR authorization session not found." });
+    }
+
+    if (approve) {
+      const sessionToken = crypto.randomBytes(32).toString("hex");
+      sessions[sessionToken] = emailLower;
+      session.status = 'authorized';
+      session.authorizedEmail = emailLower;
+      session.authorizedSessionToken = sessionToken;
+      res.json({ success: true, message: "Access successfully authorized." });
+    } else {
+      session.status = 'rejected';
+      res.json({ success: true, message: "Access request rejected." });
+    }
   });
 
   // --- Vite Dev Server Middleware or Static Production Build ---

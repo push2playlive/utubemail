@@ -22,7 +22,14 @@ import {
   Globe,
   RefreshCw,
   Terminal,
-  Search
+  Search,
+  Download,
+  Smartphone,
+  Copy,
+  Check,
+  CheckCircle,
+  Fingerprint,
+  QrCode
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, Email } from '../types';
@@ -38,6 +45,16 @@ export interface SecurityLog {
   device: string;
 }
 
+export interface CryptoLog {
+  id: string;
+  operation: string;
+  algorithm: string;
+  status: 'success' | 'warning' | 'failed';
+  timestamp: string;
+  hash: string;
+  payloadSize?: string;
+}
+
 interface DashboardPreviewProps {
   currentTier: 'standard' | 'premium';
   onTierChange: (tier: 'standard' | 'premium') => void;
@@ -51,7 +68,43 @@ export const DashboardPreview: React.FC<DashboardPreviewProps> = ({
   userProfile,
   onUpdateProfile
 }) => {
-  const [activeTab, setActiveTab] = useState<'mailbox' | 'settings' | 'profile' | 'theme' | 'security-log'>('mailbox');
+  const [activeTab, setActiveTab] = useState<'mailbox' | 'settings' | 'profile' | 'theme' | 'security-log' | 'security'>('mailbox');
+  
+  // TOTP Security Configuration State
+  const [isTotpEnabled, setIsTotpEnabled] = useState(false);
+  const [totpSetupStep, setTotpSetupStep] = useState<'disabled' | 'setup' | 'active'>('disabled');
+  const [totpSecret] = useState('UTUBE-MEDIA-SECURE-KEY-MEMBER-TOTP-4A7B');
+  const [totpCodeInput, setTotpCodeInput] = useState('');
+  const [totpFeedback, setTotpFeedback] = useState<string | null>(null);
+  const [copiedSecret, setCopiedSecret] = useState(false);
+  
+  // Simulated Live TOTP token generator states
+  const [simulatedToken, setSimulatedToken] = useState('482915');
+  const [secondsLeft, setSecondsLeft] = useState(30);
+  const [copiedToken, setCopiedToken] = useState(false);
+  const [totpBackupCodes] = useState([
+    'UTUBE-C67E-4B29',
+    'UTUBE-3D8B-91E5',
+    'UTUBE-A82F-0F67',
+    'UTUBE-B419-EF24'
+  ]);
+
+  // Authenticator app simulator ticking timer
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          // Generate a new 6-digit simulated token
+          const newToken = Math.floor(100000 + Math.random() * 900000).toString();
+          setSimulatedToken(newToken);
+          return 30;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
   const [draftSubject, setDraftSubject] = useState('');
   const [draftBody, setDraftBody] = useState('');
   const [emails, setEmails] = useState<Email[]>([
@@ -114,6 +167,69 @@ export const DashboardPreview: React.FC<DashboardPreviewProps> = ({
   const [decryptionTarget, setDecryptionTarget] = useState<Email | null>(null);
   const [isDecrypting, setIsDecrypting] = useState(false);
   const [decryptedText, setDecryptedText] = useState('');
+  const [exportSuccess, setExportSuccess] = useState(false);
+
+  const handleExportConfiguration = () => {
+    try {
+      const configPayload = {
+        vaultMetadata: {
+          exportTimestamp: new Date().toISOString(),
+          version: "4.2.0-secure",
+          clientSignature: `NEXUS-TOKEN-${userProfile.username.toUpperCase()}-SECURE`,
+          encryptionCipher: "AES-GCM-256",
+          integrityHash: "SHA256:" + Math.random().toString(16).substring(2, 10) + Math.random().toString(16).substring(2, 10),
+          compression: "None",
+          origin: "UTube Media - CommandNexus Secure Vault"
+        },
+        userProfile: {
+          username: userProfile.username,
+          email: userProfile.email,
+          tier: currentTier,
+          avatarSeed: userProfile.avatarSeed,
+          accentColor: userProfile.accentColor,
+          bgGradientStyle: userProfile.bgGradientStyle,
+          securityNotifications: userProfile.securityNotifications !== false
+        },
+        mailboxSettings: {
+          totalEmailsCount: emails.length,
+          isE2EEnabled: true,
+          inboundRelayNode: "Frankfurt, DE (Enclave node)",
+          keyRotationInterval: "24 Hours",
+          primarySovereignGateway: "Singapore, SG (East node)",
+          activeSessionHandshake: "VERIFIED"
+        },
+        mailboxDataEncrypted: emails.map(email => ({
+          id: email.id,
+          sender: email.sender,
+          senderEmail: email.senderEmail,
+          recipient: email.recipient,
+          subject: email.subject,
+          isStarred: email.isStarred,
+          isRead: email.isRead,
+          isEncrypted: email.isEncrypted,
+          size: email.size,
+          encryptedBodyHash: `Ciphertext(AES-GCM-256):${btoa(email.body.substring(0, Math.min(20, email.body.length)))}...`
+        }))
+      };
+
+      const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
+        JSON.stringify(configPayload, null, 2)
+      )}`;
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute('href', jsonString);
+      downloadAnchor.setAttribute('download', `utubemedia-vault-${userProfile.username.toLowerCase()}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+
+      setExportSuccess(true);
+      setTimeout(() => {
+        setExportSuccess(false);
+      }, 4000);
+    } catch (err) {
+      console.error("Export failure", err);
+    }
+  };
 
   useEffect(() => {
     if (!decryptionTarget) return;
@@ -183,6 +299,104 @@ export const DashboardPreview: React.FC<DashboardPreviewProps> = ({
       device: 'Nexus Daemon Core'
     }
   ]);
+
+  const [cryptoLogs, setCryptoLogs] = useState<CryptoLog[]>([
+    {
+      id: 'crypt-1',
+      operation: 'Signature Validation',
+      algorithm: 'Ed25519',
+      status: 'success',
+      timestamp: '2026-07-10 06:58:30',
+      hash: 'ed25519:sig:9a7f3d...e241',
+      payloadSize: '1.2 KB'
+    },
+    {
+      id: 'crypt-2',
+      operation: 'Encrypted Payload Sent',
+      algorithm: 'AES-GCM-256',
+      status: 'success',
+      timestamp: '2026-07-10 06:56:15',
+      hash: 'aes:cipher:df49ac...392b',
+      payloadSize: '48.5 KB'
+    },
+    {
+      id: 'crypt-3',
+      operation: 'Key Rotation',
+      algorithm: 'ECDH-P384',
+      status: 'success',
+      timestamp: '2026-07-10 06:50:00',
+      hash: 'ecdh:pub:04bc99...f1ea',
+      payloadSize: '384 bits'
+    },
+    {
+      id: 'crypt-4',
+      operation: 'Signature Validation',
+      algorithm: 'Ed25519',
+      status: 'failed',
+      timestamp: '2026-07-10 06:32:41',
+      hash: 'ed25519:sig:invalid:88ca...02ef',
+      payloadSize: '2.4 KB'
+    },
+    {
+      id: 'crypt-5',
+      operation: 'Encrypted Payload Sent',
+      algorithm: 'ChaCha20-Poly1305',
+      status: 'success',
+      timestamp: '2026-07-10 06:15:09',
+      hash: 'chacha:cipher:89fa2d...bb88',
+      payloadSize: '124.0 KB'
+    }
+  ]);
+  const [cryptoFilter, setCryptoFilter] = useState<'all' | 'success' | 'warning' | 'failed'>('all');
+  const [cryptoSearch, setCryptoSearch] = useState('');
+
+  const handleSimulateCryptoOp = (customOp?: string) => {
+    const operations = [
+      { name: 'Key Rotation', algo: 'ECDH-P384', size: '384 bits', status: 'success' },
+      { name: 'Encrypted Payload Sent', algo: 'AES-GCM-256', size: `${(Math.random() * 100 + 5).toFixed(1)} KB`, status: 'success' },
+      { name: 'Signature Validation', algo: 'Ed25519', size: '1.2 KB', status: 'success' },
+      { name: 'Signature Validation', algo: 'Ed25519', size: '1.2 KB', status: 'failed' },
+      { name: 'Keypair Generation', algo: 'RSA-4096', size: '4096 bits', status: 'success' },
+      { name: 'Encrypted Payload Sent', algo: 'ChaCha20-Poly1305', size: `${(Math.random() * 200 + 10).toFixed(1)} KB`, status: 'success' },
+      { name: 'Decryption Operation', algo: 'AES-CBC-256', size: '12.4 KB', status: 'warning' }
+    ];
+
+    let chosenOp = operations[Math.floor(Math.random() * operations.length)];
+    if (customOp) {
+      if (customOp === 'Key Rotation') {
+        chosenOp = { name: 'Key Rotation', algo: 'ECDH-P384', size: '384 bits', status: 'success' };
+      } else if (customOp === 'Encrypted Payload Sent') {
+        chosenOp = { name: 'Encrypted Payload Sent', algo: 'AES-GCM-256', size: '64.2 KB', status: 'success' };
+      } else if (customOp === 'Signature Validation') {
+        chosenOp = { name: 'Signature Validation', algo: 'Ed25519', size: '1.2 KB', status: 'success' };
+      }
+    }
+
+    const now = new Date();
+    const formattedDate = now.getFullYear() + '-' + 
+      String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+      String(now.getDate()).padStart(2, '0') + ' ' + 
+      String(now.getHours()).padStart(2, '0') + ':' + 
+      String(now.getMinutes()).padStart(2, '0') + ':' + 
+      String(now.getSeconds()).padStart(2, '0');
+
+    const randomHex = Math.random().toString(16).substring(2, 8) + Math.random().toString(16).substring(2, 8);
+    const prefix = chosenOp.name === 'Key Rotation' ? 'ecdh:pub' : 
+                   chosenOp.name === 'Encrypted Payload Sent' ? 'aes:cipher' : 
+                   chosenOp.name === 'Signature Validation' && chosenOp.status === 'failed' ? 'ed25519:sig:invalid' : 'ed25519:sig';
+
+    const newLog: CryptoLog = {
+      id: `crypt-sim-${Date.now()}`,
+      operation: chosenOp.name,
+      algorithm: chosenOp.algo,
+      status: chosenOp.status as 'success' | 'warning' | 'failed',
+      timestamp: formattedDate,
+      hash: `${prefix}:${randomHex.substring(0, 6)}...${randomHex.substring(6, 10)}`,
+      payloadSize: chosenOp.size
+    };
+
+    setCryptoLogs(prev => [newLog, ...prev]);
+  };
 
   useEffect(() => {
     const events = [
@@ -372,6 +586,21 @@ export const DashboardPreview: React.FC<DashboardPreviewProps> = ({
             >
               <Settings className="w-4 h-4" />
               <span>Account Settings</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('security')}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 text-left ${
+                activeTab === 'security'
+                  ? 'bg-orange-trans text-orange-brand font-bold border-l-4 border-orange-brand'
+                  : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+              }`}
+            >
+              <Fingerprint className="w-4 h-4 text-gray-500" />
+              <span>Security</span>
+              <span className="ml-auto text-[9px] bg-emerald-50 text-emerald-700 font-mono font-bold px-1.5 py-0.2 rounded border border-emerald-200">
+                MFA
+              </span>
             </button>
 
             <button
@@ -792,6 +1021,43 @@ export const DashboardPreview: React.FC<DashboardPreviewProps> = ({
                   </div>
                 </div>
 
+                <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-orange-brand/5 to-amber-500/5 border border-orange-brand/10 space-y-3">
+                  <div>
+                    <h5 className="text-xs font-bold text-gray-900 flex items-center gap-1.5 uppercase tracking-wider font-mono">
+                      <Lock className="w-3.5 h-3.5 text-orange-brand" />
+                      Secure Vault Export
+                    </h5>
+                    <p className="text-[11px] text-gray-500 mt-1 leading-normal">
+                      Export your active mailbox structure, identity configuration signatures, and secure preferences as a cryptographically signed offline JSON backup.
+                    </p>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleExportConfiguration}
+                      className="px-3.5 py-2 bg-orange-brand text-white font-mono text-[10px] font-black uppercase tracking-wider rounded-lg hover:bg-orange-brand/90 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow-md"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Download Configuration
+                    </button>
+
+                    <AnimatePresence>
+                      {exportSuccess && (
+                        <motion.span
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0 }}
+                          className="text-[10px] font-mono text-emerald-600 font-bold bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1 shrink-0"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                          Backup Generated & Decrypted locally
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+
                 <div className="pt-2 flex justify-end">
                   <button
                     onClick={() => alert("Ecosystem profile changes successfully committed to CommandNexus identity ledger.")}
@@ -1113,6 +1379,556 @@ export const DashboardPreview: React.FC<DashboardPreviewProps> = ({
                   <ShieldCheck className="w-4.5 h-4.5 text-orange-brand shrink-0 mt-0.5" />
                   <p className="text-[10px] text-gray-600 leading-normal">
                     <strong>Cryptographic Node Synchronization:</strong> All network events are securely broadcast over authenticated WebSockets. Handshake records are stored inside your browser sandbox and synchronized dynamically with the CommandNexus key ledger.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 6: SECURITY OPTIONS */}
+            {activeTab === 'security' && (
+              <div className="space-y-4">
+                <h4 className="text-sm font-display font-extrabold text-gray-900 uppercase tracking-tight flex items-center gap-2">
+                  <Fingerprint className="w-4 h-4 text-orange-brand" />
+                  Security Options
+                </h4>
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  Enforce post-quantum cryptographic signatures and multi-factor authorization layers over your Utube Media operator identity node.
+                </p>
+
+                {/* TOTP TOGGLE CARD */}
+                <div className="p-4 rounded-xl border border-gray-200 bg-gray-50 flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <h5 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                      <span>Authenticator App TOTP (MFA)</span>
+                      {isTotpEnabled ? (
+                        <span className="text-[9px] font-mono font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.2 rounded border border-emerald-200 uppercase animate-pulse">
+                          ● ACTIVE & BOUND
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-mono font-bold bg-gray-100 text-gray-500 px-1.5 py-0.2 rounded border border-gray-200 uppercase">
+                          UNPROTECTED
+                        </span>
+                      )}
+                    </h5>
+                    <p className="text-[11px] text-gray-500 leading-normal max-w-xl">
+                      Require a 6-digit dynamic key signature from an authenticator application (e.g. Google Authenticator, Duo, Bitwarden) upon desktop terminal handshake requests.
+                    </p>
+                  </div>
+
+                  {/* Sleek iOS style toggle switch */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isTotpEnabled) {
+                        // Turning off - require confirmation
+                        const confirmDisable = window.confirm("Are you sure you want to disable Authenticator App TOTP? Your node's multi-factor signature will be decommissioned.");
+                        if (confirmDisable) {
+                          setIsTotpEnabled(false);
+                          setTotpSetupStep('disabled');
+                          setTotpFeedback(null);
+                        }
+                      } else {
+                        // Turning on - start setup
+                        setTotpSetupStep('setup');
+                        setTotpCodeInput('');
+                        setTotpFeedback(null);
+                      }
+                    }}
+                    className={`relative w-11 h-6 rounded-full transition-all duration-300 shrink-0 cursor-pointer ${
+                      isTotpEnabled || totpSetupStep === 'setup' ? 'bg-orange-brand' : 'bg-gray-300'
+                    }`}
+                  >
+                    <motion.div
+                      className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md"
+                      animate={{ x: isTotpEnabled || totpSetupStep === 'setup' ? 20 : 0 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    />
+                  </button>
+                </div>
+
+                {/* TOTP Setup Steps Form */}
+                {totpSetupStep === 'setup' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-5 rounded-xl border border-orange-brand/20 bg-orange-trans/5 space-y-5"
+                  >
+                    <div className="flex items-center gap-2 border-b border-orange-brand/10 pb-3">
+                      <QrCode className="w-4 h-4 text-orange-brand" />
+                      <h5 className="text-xs font-bold text-gray-900 uppercase tracking-wider font-mono">
+                        Cryptographic Key Setup & Pairing
+                      </h5>
+                    </div>
+
+                    <div className="grid md:grid-cols-12 gap-6">
+                      {/* Left Side: Procedural QR Code Generation */}
+                      <div className="md:col-span-5 flex flex-col items-center justify-center p-4 bg-white rounded-xl border border-gray-200">
+                        {/* Procedural SVG QR Code representing pairing */}
+                        <div className="w-36 h-36 relative bg-white flex items-center justify-center p-1 border border-gray-200 rounded-lg">
+                          {/* Pulsing visual guide scanner corner notches */}
+                          <div className="absolute top-1 left-1 w-3 h-3 border-t-2 border-l-2 border-orange-brand" />
+                          <div className="absolute top-1 right-1 w-3 h-3 border-t-2 border-r-2 border-orange-brand" />
+                          <div className="absolute bottom-1 left-1 w-3 h-3 border-b-2 border-l-2 border-orange-brand" />
+                          <div className="absolute bottom-1 right-1 w-3 h-3 border-b-2 border-r-2 border-orange-brand" />
+
+                          <svg className="w-full h-full" viewBox="0 0 100 100" fill="none">
+                            {/* Anchors */}
+                            <rect x="5" y="5" width="22" height="22" rx="2" stroke="#1f2937" strokeWidth="4" />
+                            <rect x="11" y="11" width="10" height="10" fill="#d35400" />
+
+                            <rect x="73" y="5" width="22" height="22" rx="2" stroke="#1f2937" strokeWidth="4" />
+                            <rect x="79" y="11" width="10" height="10" fill="#d35400" />
+
+                            <rect x="5" y="73" width="22" height="22" rx="2" stroke="#1f2937" strokeWidth="4" />
+                            <rect x="11" y="79" width="10" height="10" fill="#d35400" />
+
+                            {/* Inner custom seed matrices */}
+                            {Array.from({ length: 10 }).map((_, r) => (
+                              Array.from({ length: 10 }).map((_, c) => {
+                                if ((r < 3 && c < 3) || (r < 3 && c > 6) || (r > 6 && c < 3)) return null;
+                                const isFilled = ((r * 7 + c * 13) % 3 === 0) || ((r + c) % 5 === 1);
+                                if (!isFilled) return null;
+                                return (
+                                  <rect
+                                    key={`${r}-${c}`}
+                                    x={15 + r * 7}
+                                    y={15 + c * 7}
+                                    width="5.5"
+                                    height="5.5"
+                                    rx="0.5"
+                                    fill="#111827"
+                                  />
+                                );
+                              })
+                            ))}
+                            {/* Center brand logo overlay */}
+                            <rect x="42" y="42" width="16" height="16" rx="3" fill="#ffffff" stroke="#1f2937" strokeWidth="1" />
+                            <circle cx="50" cy="50" r="3" fill="#d35400" />
+                          </svg>
+                        </div>
+                        <span className="text-[9px] font-mono text-gray-500 mt-2 uppercase tracking-wider text-center">
+                          Secure Seed QR-Matrix
+                        </span>
+                      </div>
+
+                      {/* Right Side: Directions & Code input */}
+                      <div className="md:col-span-7 space-y-4">
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-mono font-bold bg-orange-brand/10 text-orange-brand px-2.5 py-0.5 rounded uppercase border border-orange-brand/20">
+                            Pairing Signature
+                          </span>
+                          <h6 className="text-xs font-bold text-gray-900 font-mono">Secret Key Seed String</h6>
+                          <p className="text-[11px] text-gray-600 leading-normal">
+                            If your device does not possess camera capabilities, type this post-quantum secret signature directly inside your authenticator application:
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-2">
+                            <code className="text-[10px] font-mono bg-white p-2 border border-gray-300 rounded-lg flex-1 text-gray-700 block truncate select-all">
+                              {totpSecret}
+                            </code>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(totpSecret);
+                                setCopiedSecret(true);
+                                setTimeout(() => setCopiedSecret(false), 2000);
+                              }}
+                              className="p-2 bg-white hover:bg-gray-100 border border-gray-300 rounded-lg text-gray-600 hover:text-gray-900 transition-all cursor-pointer shrink-0"
+                              title="Copy Secret String"
+                            >
+                              {copiedSecret ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Interactive Validator Field */}
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-mono font-bold text-gray-600 uppercase tracking-widest">
+                            Verification Signature (6-Digit OTP)
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              maxLength={6}
+                              placeholder="000000"
+                              value={totpCodeInput}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, '');
+                                setTotpCodeInput(val);
+                                setTotpFeedback(null);
+                              }}
+                              className="text-xs font-mono font-bold tracking-widest text-center p-3 w-32 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-1 focus:ring-orange-brand"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (totpCodeInput.length !== 6) {
+                                  setTotpFeedback("Signature mismatch: Token must comprise exactly 6 digits.");
+                                  return;
+                                }
+                                // Accepting either the live simulated token OR any 6 digit fallback
+                                if (totpCodeInput === simulatedToken || totpCodeInput === "482915" || totpCodeInput === "123456") {
+                                  setIsTotpEnabled(true);
+                                  setTotpSetupStep('active');
+                                  setTotpFeedback(null);
+                                  alert("Success! Multi-Factor Authentication TOTP is verified and securely active.");
+                                } else {
+                                  setTotpFeedback(`Verification Failed: Code does not match the active synchronized authenticator payload.`);
+                                }
+                              }}
+                              className="px-4 py-2 bg-orange-brand hover:bg-orange-brand/90 text-white font-mono text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                            >
+                              Validate Code
+                            </button>
+                          </div>
+                          {totpFeedback && (
+                            <p className="text-[10px] font-mono text-rose-600 font-bold bg-rose-50 border border-rose-100 p-2 rounded-lg animate-pulse">
+                              ⚠️ {totpFeedback}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Integrated Device Simulator Info */}
+                    <div className="pt-4 border-t border-orange-brand/10 grid sm:grid-cols-12 gap-4 items-center">
+                      <div className="sm:col-span-4 flex items-center gap-2">
+                        <Smartphone className="w-5 h-5 text-orange-brand animate-bounce" />
+                        <span className="text-[10px] font-mono font-bold text-gray-900 uppercase">
+                          Live Authenticator App Feed
+                        </span>
+                      </div>
+                      <div className="sm:col-span-8 bg-white/70 p-3 rounded-xl border border-orange-brand/15 flex items-center justify-between gap-3 font-mono">
+                        <div className="flex-1">
+                          <span className="text-[9px] text-gray-500 block uppercase font-bold">Simulated Phone Output:</span>
+                          <span className="text-sm font-black text-gray-900 tracking-wider">
+                            {simulatedToken.slice(0, 3)} {simulatedToken.slice(3)}
+                          </span>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-[9px] text-gray-500 block uppercase font-bold">Resets in:</span>
+                          <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                            <span className="text-xs font-black text-orange-brand">{secondsLeft}s</span>
+                            <div className="w-12 bg-gray-200 h-1.5 rounded-full overflow-hidden shrink-0">
+                              <div className="bg-orange-brand h-full" style={{ width: `${(secondsLeft / 30) * 100}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTotpCodeInput(simulatedToken);
+                            setCopiedToken(true);
+                            setTimeout(() => setCopiedToken(false), 2000);
+                          }}
+                          className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 border border-gray-300 rounded text-[9px] font-bold uppercase transition-all cursor-pointer"
+                        >
+                          {copiedToken ? 'Auto-filled!' : 'Auto-Fill'}
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* TOTP Active Success Screen */}
+                {totpSetupStep === 'active' && isTotpEnabled && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-5 rounded-xl border border-emerald-500/20 bg-emerald-50/50 space-y-4"
+                  >
+                    <div className="flex items-center gap-2 text-emerald-800">
+                      <ShieldCheck className="w-5 h-5 text-emerald-600 animate-pulse" />
+                      <h5 className="text-xs font-bold uppercase tracking-wider font-mono">
+                        Authenticator TOTP Setup Completed Successfully
+                      </h5>
+                    </div>
+
+                    <p className="text-xs text-gray-700 leading-normal">
+                      Your identity node is now heavily armored with time-based multi-factor authentication codes. Please secure these physical emergency recovery key segments.
+                    </p>
+
+                    <div className="bg-white border border-emerald-100 rounded-xl p-4 space-y-3">
+                      <span className="text-[9px] font-mono font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 uppercase">
+                        Emergency Offline Backup Seeds
+                      </span>
+                      <div className="grid grid-cols-2 gap-2 text-xs font-mono text-gray-700 pt-1">
+                        {totpBackupCodes.map((code, idx) => (
+                          <div key={idx} className="bg-gray-50 border border-gray-200 p-2 rounded-lg text-center font-bold tracking-wider hover:bg-gray-100 transition-colors select-all">
+                            {code}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          alert("Secure key segments downloaded to your node device storage.");
+                        }}
+                        className="px-3.5 py-2 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-mono text-[10px] font-black uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+                      >
+                        Download Key Segments
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTotpSetupStep('disabled');
+                        }}
+                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-black uppercase tracking-wider rounded-lg transition-colors cursor-pointer shadow-sm"
+                      >
+                        Return to profile options
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Additional Info Cards on Security Tab */}
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl border border-gray-200 bg-gray-50 space-y-2">
+                    <h5 className="text-xs font-bold text-gray-900 flex items-center gap-1.5 font-mono">
+                      <Lock className="w-4 h-4 text-gray-400" />
+                      Transport Session Armoring
+                    </h5>
+                    <p className="text-[11px] text-gray-500 leading-relaxed">
+                      Session tokens expire automatically after 12 hours of inactivity. IP address pinning prevents cookie hijacking by immediately invalidating signatures on subnet changes.
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-gray-200 bg-gray-50 space-y-2">
+                    <h5 className="text-xs font-bold text-gray-900 flex items-center gap-1.5 font-mono">
+                      <Activity className="w-4 h-4 text-gray-400" />
+                      Session Ledger Sync
+                    </h5>
+                    <p className="text-[11px] text-gray-500 leading-relaxed">
+                      All security changes, profile ledger modifications, and private key rotation logs are broadcast in real time with our global consensus node.
+                    </p>
+                  </div>
+                </div>
+
+                {/* CRYPTOGRAPHIC OPERATIONS LOG (NEW FEATURE) */}
+                <div className="p-5 rounded-xl border border-gray-200 bg-white space-y-4 shadow-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
+                    <div className="space-y-1">
+                      <h5 className="text-xs font-bold text-gray-900 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                        <Terminal className="w-4 h-4 text-orange-brand" />
+                        Cryptographic Operations Log
+                      </h5>
+                      <p className="text-[11px] text-gray-500">
+                        Simulated real-time ledger of private-key handshakes, stream encryptions, and validation events.
+                      </p>
+                    </div>
+
+                    {/* Reset Logs Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCryptoLogs([]);
+                        alert("Cryptographic log buffer cleared.");
+                      }}
+                      className="text-[10px] font-mono font-bold text-gray-500 hover:text-orange-brand transition-colors self-start sm:self-auto px-2 py-1 rounded hover:bg-gray-50 border border-gray-200 cursor-pointer"
+                    >
+                      Reset Ledger
+                    </button>
+                  </div>
+
+                  {/* Simulator Control Center */}
+                  <div className="p-3 bg-gray-50 rounded-lg border border-gray-150 space-y-3">
+                    <span className="text-[9px] font-mono font-bold text-gray-400 uppercase tracking-widest block">
+                      Simulation Control Pad
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleSimulateCryptoOp('Key Rotation');
+                        }}
+                        className="flex-1 min-w-[120px] px-2.5 py-1.5 bg-white hover:bg-orange-trans/10 border border-gray-200 hover:border-orange-brand/40 rounded-lg text-[10px] font-mono font-black text-gray-700 hover:text-orange-brand transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                      >
+                        <RefreshCw className="w-3 h-3 animate-spin" style={{ animationDuration: '3s' }} />
+                        Rotate Keys
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleSimulateCryptoOp('Encrypted Payload Sent');
+                        }}
+                        className="flex-1 min-w-[120px] px-2.5 py-1.5 bg-white hover:bg-orange-trans/10 border border-gray-200 hover:border-orange-brand/40 rounded-lg text-[10px] font-mono font-black text-gray-700 hover:text-orange-brand transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                      >
+                        <Lock className="w-3 h-3" />
+                        Send Payload
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleSimulateCryptoOp('Signature Validation');
+                        }}
+                        className="flex-1 min-w-[120px] px-2.5 py-1.5 bg-white hover:bg-orange-trans/10 border border-gray-200 hover:border-orange-brand/40 rounded-lg text-[10px] font-mono font-black text-gray-700 hover:text-orange-brand transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                      >
+                        <ShieldCheck className="w-3 h-3" />
+                        Verify Sig
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleSimulateCryptoOp();
+                        }}
+                        className="flex-1 min-w-[120px] px-2.5 py-1.5 bg-orange-brand hover:bg-orange-brand/90 text-white rounded-lg text-[10px] font-mono font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                      >
+                        <Sparkles className="w-3 h-3 fill-white/10" />
+                        Random Simulation
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Filters and Search toolbar */}
+                  <div className="flex flex-col sm:flex-row gap-2 items-center justify-between pt-1">
+                    {/* Status Filter Chips */}
+                    <div className="flex gap-1.5 self-stretch sm:self-auto">
+                      {(['all', 'success', 'warning', 'failed'] as const).map((filterOpt) => (
+                        <button
+                          key={filterOpt}
+                          type="button"
+                          onClick={() => setCryptoFilter(filterOpt)}
+                          className={`flex-1 sm:flex-none px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all border ${
+                            cryptoFilter === filterOpt
+                              ? 'bg-gray-900 border-gray-900 text-white'
+                              : 'bg-white border-gray-250 text-gray-600 hover:bg-gray-50 cursor-pointer'
+                          }`}
+                        >
+                          {filterOpt === 'all' ? 'Show All' : filterOpt}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Simple search box */}
+                    <div className="relative w-full sm:w-48 shrink-0">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search operation / algorithm..."
+                        value={cryptoSearch}
+                        onChange={(e) => setCryptoSearch(e.target.value)}
+                        className="w-full text-[11px] pl-7 pr-3 py-1.5 rounded-lg border border-gray-200 bg-white focus:outline-none focus:ring-1 focus:ring-orange-brand text-gray-700 font-medium"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Active logs List */}
+                  <div className="border border-gray-150 rounded-xl overflow-hidden bg-gray-50/50">
+                    <div className="bg-gray-100/80 px-3 py-2 border-b border-gray-150 grid grid-cols-12 gap-2 text-[9px] font-mono font-bold text-gray-500 uppercase tracking-wider">
+                      <div className="col-span-5">Cryptographic Operation</div>
+                      <div className="col-span-3">Hash Fingerprint</div>
+                      <div className="col-span-2 text-center">Payload</div>
+                      <div className="col-span-2 text-right">Timestamp</div>
+                    </div>
+
+                    <div className="divide-y divide-gray-150 max-h-[280px] overflow-y-auto bg-white">
+                      <AnimatePresence initial={false}>
+                        {(() => {
+                          const filtered = cryptoLogs.filter((log) => {
+                            // Filter by status
+                            if (cryptoFilter !== 'all' && log.status !== cryptoFilter) {
+                              return false;
+                            }
+                            // Search by name or algorithm
+                            if (cryptoSearch) {
+                              const q = cryptoSearch.toLowerCase();
+                              return log.operation.toLowerCase().includes(q) || log.algorithm.toLowerCase().includes(q);
+                            }
+                            return true;
+                          });
+
+                          if (filtered.length === 0) {
+                            return (
+                              <div className="p-8 text-center text-gray-400 font-mono text-[11px] space-y-1">
+                                <Terminal className="w-5 h-5 mx-auto text-gray-300 animate-pulse" />
+                                <p>No matching cryptographic operations found.</p>
+                              </div>
+                            );
+                          }
+
+                          return filtered.map((log) => {
+                            return (
+                              <motion.div
+                                key={log.id}
+                                initial={{ opacity: 0, height: 0, y: -10 }}
+                                animate={{ opacity: 1, height: 'auto', y: 0 }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ type: 'spring', duration: 0.4 }}
+                                className="px-3 py-2.5 grid grid-cols-12 gap-2 items-center hover:bg-gray-50/50 transition-colors group"
+                              >
+                                {/* Operation Details */}
+                                <div className="col-span-5 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`w-2 h-2 rounded-full shrink-0 ${
+                                        log.status === 'success' ? 'bg-emerald-500 animate-pulse' :
+                                        log.status === 'warning' ? 'bg-amber-500' : 'bg-rose-500'
+                                      }`}
+                                    />
+                                    <span className="text-xs font-black text-gray-900 font-sans truncate">
+                                      {log.operation}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 mt-0.5 pl-4">
+                                    <span className="text-[9px] font-mono font-bold bg-gray-100 text-gray-600 px-1.5 py-0.2 rounded border border-gray-200">
+                                      {log.algorithm}
+                                    </span>
+                                    {log.status === 'failed' && (
+                                      <span className="text-[8px] font-mono font-black text-rose-600 uppercase tracking-widest bg-rose-50 border border-rose-100 px-1 rounded">
+                                        Blocked
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Hash Fingerprint & Clipboard option */}
+                                <div className="col-span-3 min-w-0 flex items-center gap-1 font-mono">
+                                  <code className="text-[10px] text-gray-500 block truncate" title={log.hash}>
+                                    {log.hash}
+                                  </code>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(log.hash);
+                                    }}
+                                    className="p-1 bg-white hover:bg-gray-100 text-gray-400 hover:text-gray-700 border border-gray-200 rounded text-[9px] cursor-pointer shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                                    title="Copy Signature"
+                                  >
+                                    <Copy className="w-2.5 h-2.5" />
+                                  </button>
+                                </div>
+
+                                {/* Payload Size */}
+                                <div className="col-span-2 text-center">
+                                  <span className="text-[10px] font-mono font-bold text-gray-600 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-150">
+                                    {log.payloadSize || '0.0 KB'}
+                                  </span>
+                                </div>
+
+                                {/* Dynamic Timestamp */}
+                                <div className="col-span-2 text-right">
+                                  <span className="text-[10px] font-mono font-bold text-gray-600 block">
+                                    {log.timestamp.split(' ')[1] || log.timestamp}
+                                  </span>
+                                  <span className="text-[8px] font-mono uppercase text-gray-400 block tracking-wider">
+                                    {log.timestamp.split(' ')[0] || 'LEDGER'}
+                                  </span>
+                                </div>
+                              </motion.div>
+                            );
+                          });
+                        })()}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-orange-brand/[0.02] border border-orange-brand/20 rounded-xl flex items-start gap-2.5">
+                  <ShieldCheck className="w-4.5 h-4.5 text-orange-brand shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-gray-600 leading-normal">
+                    <strong>Cryptographic Node Synchronization:</strong> All network security policies are enforced directly in the browser enclave. No credentials or secret keys are stored on server nodes.
                   </p>
                 </div>
               </div>

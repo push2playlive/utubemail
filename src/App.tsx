@@ -21,7 +21,12 @@ import {
   ChevronUp,
   Globe,
   Languages,
-  ShieldAlert
+  ShieldAlert,
+  QrCode,
+  Smartphone,
+  Fingerprint,
+  Scan,
+  RefreshCw
 } from 'lucide-react';
 import { EnvelopeLogo } from './components/EnvelopeLogo';
 import { HamburgerMenu } from './components/HamburgerMenu';
@@ -65,6 +70,71 @@ export default function App() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [recoveryFeedback, setRecoveryFeedback] = useState<string | null>(null);
   const [recoverySuccess, setRecoverySuccess] = useState(false);
+
+  // QR Code Sign-In states
+  const [qrSignInMode, setQrSignInMode] = useState<'passkey' | 'qr'>('passkey');
+  const [qrToken, setQrToken] = useState<string | null>(null);
+  const [qrStatus, setQrStatus] = useState<'pending' | 'scanned' | 'authorized' | 'rejected' | null>(null);
+  const [isPhoneSimOpen, setIsPhoneSimOpen] = useState(false);
+
+  // Simulated Phone states
+  const [phoneAccount, setPhoneAccount] = useState('operator@utubemail.com');
+  const [phoneStatus, setPhoneStatus] = useState<'home' | 'app' | 'scanning' | 'verifying' | 'success' | 'rejected'>('home');
+  const [scanProgress, setScanProgress] = useState(0);
+  const [biometricProgress, setBiometricProgress] = useState(0);
+  const [isBiometricScanning, setIsBiometricScanning] = useState(false);
+
+  // Functions for QR initiation
+  const handleInitiateQR = async () => {
+    try {
+      const res = await fetch("/api/auth/qr/initiate", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setQrToken(data.qrToken);
+          setQrStatus('pending');
+          setLoginFeedback(null);
+        }
+      }
+    } catch (err) {
+      console.error("QR initiation failure", err);
+    }
+  };
+
+  useEffect(() => {
+    let intervalId: any;
+    if (qrSignInMode === 'qr' && qrToken && !isLoggedIn) {
+      intervalId = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/auth/qr/status/${qrToken}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success) {
+              setQrStatus(data.status);
+              if (data.status === 'authorized' && data.sessionToken) {
+                setActiveSessionToken(data.sessionToken);
+                setIsLoggedIn(true);
+                setUserProfile(data.user);
+                setLoginFeedback(null);
+                clearInterval(intervalId);
+              } else if (data.status === 'rejected') {
+                setLoginFeedback("Mobile signature authentication rejected.");
+                clearInterval(intervalId);
+              }
+            }
+          } else if (res.status === 410) {
+            setLoginFeedback("QR token session expired. Regenerating secure token...");
+            handleInitiateQR();
+          }
+        } catch (err) {
+          console.error("QR check error", err);
+        }
+      }, 1500);
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [qrSignInMode, qrToken, isLoggedIn]);
 
   // New password strength check metrics
   const isNewLengthValid = newPasswordInput.length >= 8;
@@ -734,173 +804,327 @@ export default function App() {
                       </div>
                     )}
 
-                    <div>
-                      <label className="block text-[10px] font-mono font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                        {t('usernameLabel')}
-                      </label>
-                      <input
-                        type="text"
-                        required={isSignUp}
-                        placeholder={isSignUp ? "e.g., AliceSmith" : t('usernamePlaceholder')}
-                        value={usernameInput}
-                        onChange={(e) => setUsernameInput(e.target.value)}
-                        className="w-full text-xs p-3 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-brand transition-all"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-mono font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                        {t('emailLabel')}
-                      </label>
-                      <div className="flex">
-                        <input
-                           type="text"
-                           placeholder={isSignUp ? "yourname" : "operator"}
-                           value={emailInput.split('@')[0]}
-                           onChange={(e) => {
-                             const val = e.target.value;
-                             setEmailInput(tier === 'premium' ? `${val}@utubemail.com` : `${val}@utubemail.free`);
-                           }}
-                           className="w-full text-xs p-3 rounded-l-xl border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-brand transition-all"
-                        />
-                        <span className="bg-gray-200 text-gray-600 px-4 flex items-center text-xs font-mono border-y border-r border-gray-300 rounded-r-xl">
-                          {tier === 'premium' ? '@utubemail.com' : '@utubemail.free'}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-gray-500 mt-1 leading-snug">
-                        Linked node domain suffix dynamically reflects your active preview tier.
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-mono font-bold text-gray-600 uppercase tracking-widest mb-1.5 flex justify-between">
-                        <span>{t('passwordLabel')}</span>
-                        <span className="text-[9px] text-orange-brand font-semibold lowercase tracking-normal">
-                          {t('locallyEncrypted')}
-                        </span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showPassword ? "text" : "password"}
-                          required
-                          placeholder="••••••••••••••"
-                          value={passwordInput}
-                          onChange={(e) => setPasswordInput(e.target.value)}
-                          className="w-full text-xs p-3 pr-10 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-brand transition-all font-mono"
-                        />
+                    {!isSignUp && (
+                      <div className="grid grid-cols-2 gap-1.5 p-1 bg-gray-100 rounded-xl border border-gray-200 mb-2">
                         <button
                           type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600"
+                          onClick={() => setQrSignInMode('passkey')}
+                          className={`py-2 text-center text-[10px] font-mono font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                            qrSignInMode === 'passkey'
+                              ? 'bg-white text-orange-brand shadow-xs border border-orange-brand/10'
+                              : 'text-gray-500 hover:text-gray-900'
+                          }`}
                         >
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          <span className="flex items-center justify-center gap-1.5">
+                            <Key className="w-3.5 h-3.5" />
+                            Passkey Signature
+                          </span>
                         </button>
-                      </div>
-
-                      {/* Real-time Password Strength Visual Indicator */}
-                      {isSignUp && passwordInput && (
-                        <div className="mt-2.5 p-3.5 bg-gray-50 border border-gray-200 rounded-xl space-y-2.5 transition-all duration-300">
-                          <div className="flex items-center justify-between text-[10px]">
-                            <span className="font-mono text-gray-500 uppercase tracking-wider font-bold">{t('keyStrength')}:</span>
-                            <span className={`font-mono font-black uppercase tracking-wider text-[11px] ${
-                              strengthScore === 1 ? 'text-rose-600 animate-pulse' :
-                              strengthScore === 2 ? 'text-amber-600' :
-                              strengthScore === 3 ? 'text-indigo-600 font-bold' :
-                              'text-emerald-600 font-black'
-                            }`}>
-                              {strengthScore === 1 && 'Critical Vulnerability ⚠️'}
-                              {strengthScore === 2 && 'Susceptible / Weak'}
-                              {strengthScore === 3 && 'Armored Key Pair'}
-                              {strengthScore === 4 && 'Post-Quantum Secure ⚡'}
-                            </span>
-                          </div>
-
-                          {/* 4 Segmented bar */}
-                          <div className="grid grid-cols-4 gap-1.5 h-1.5">
-                            {[1, 2, 3, 4].map((seg) => (
-                              <div
-                                key={seg}
-                                className={`h-full rounded-full transition-all duration-300 ${
-                                  seg <= strengthScore
-                                    ? strengthScore === 1 ? 'bg-rose-500' :
-                                      strengthScore === 2 ? 'bg-amber-500' :
-                                      strengthScore === 3 ? 'bg-indigo-500' :
-                                      'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]'
-                                    : 'bg-gray-200'
-                                }`}
-                              />
-                            ))}
-                          </div>
-
-                          {/* Requirements list with active colored badges */}
-                          <div className="grid grid-cols-2 gap-x-3 gap-y-2 pt-1 text-[10px] font-mono">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${isLengthValid ? 'bg-emerald-500 scale-125' : 'bg-gray-300'}`} />
-                              <span className={isLengthValid ? 'text-gray-900 font-extrabold' : 'text-gray-500'}>8+ Characters</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${isCasingValid ? 'bg-emerald-500 scale-125' : 'bg-gray-300'}`} />
-                              <span className={isCasingValid ? 'text-gray-900 font-extrabold' : 'text-gray-500'}>Aa-Zz Casing</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${isNumberValid ? 'bg-emerald-500 scale-125' : 'bg-gray-300'}`} />
-                              <span className={isNumberValid ? 'text-gray-900 font-extrabold' : 'text-gray-500'}>0-9 Number</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${isSymbolValid ? 'bg-emerald-500 scale-125' : 'bg-gray-300'}`} />
-                              <span className={isSymbolValid ? 'text-gray-900 font-extrabold' : 'text-gray-500'}>Special Symbol</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {!isSignUp && (
-                        <div className="flex justify-end mt-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsRecoveryOpen(true);
-                              setRecoveryStep('request');
-                              setRecoveryEmail(emailInput);
-                              setRecoveryFeedback(null);
-                              setRecoveryCode(null);
-                              setRecoverySuccess(false);
-                              setNewPasswordInput('');
-                              setConfirmPasswordInput('');
-                              setRecoveryCodeInput('');
-                            }}
-                            className="text-[10px] font-mono text-orange-brand hover:text-orange-brand/80 hover:underline transition-colors focus:outline-none cursor-pointer uppercase tracking-wider font-bold"
-                          >
-                            Forgot Passkey Signature?
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {isSignUp && (
-                      <div className="flex items-start gap-2 pt-1">
-                        <input
-                          type="checkbox"
-                          id="terms"
-                          required
-                          className="mt-0.5 rounded text-orange-brand focus:ring-orange-brand border-gray-300"
-                        />
-                        <label htmlFor="terms" className="text-[11px] text-gray-600 leading-normal">
-                          {t('termsConsent')}
-                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQrSignInMode('qr');
+                            handleInitiateQR();
+                          }}
+                          className={`py-2 text-center text-[10px] font-mono font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                            qrSignInMode === 'qr'
+                              ? 'bg-white text-orange-brand shadow-xs border border-orange-brand/10'
+                              : 'text-gray-500 hover:text-gray-900'
+                          }`}
+                        >
+                          <span className="flex items-center justify-center gap-1.5">
+                            <QrCode className="w-3.5 h-3.5" />
+                            Secure QR Handshake
+                          </span>
+                        </button>
                       </div>
                     )}
 
-                    {/* Interactive buttons highlighted in striking, vibrant dark transparent orange */}
-                    <button
-                      type="submit"
-                      className="w-full mt-2 py-3 bg-orange-trans hover:bg-orange-brand/20 text-orange-brand border border-orange-brand/30 rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all duration-300 shadow-sm hover:shadow flex items-center justify-center gap-2"
-                    >
-                      <span>
-                        {isSignUp ? t('signUpBtn') : t('signInBtn')}
-                      </span>
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
+                    {!isSignUp && qrSignInMode === 'qr' ? (
+                      <div className="space-y-4 py-2 text-center">
+                        <div className="relative mx-auto w-48 h-48 bg-white border border-gray-300 rounded-2xl flex items-center justify-center shadow-inner overflow-hidden p-3 group">
+                          {/* Pulsing red scanner line */}
+                          {qrStatus === 'pending' && (
+                            <div className="absolute left-0 right-0 h-[2px] bg-red-500/85 shadow-[0_0_8px_rgba(239,68,68,0.85)] animate-pulse z-10" style={{ top: '35%' }} />
+                          )}
+                          
+                          {/* Animated procedurally generated SVG QR Code */}
+                          <svg className="w-full h-full" viewBox="0 0 100 100" fill="none">
+                            {/* Corner squares (Anchor patterns) */}
+                            <rect x="5" y="5" width="25" height="25" rx="3" stroke="#d35400" strokeWidth="4" />
+                            <rect x="11" y="11" width="13" height="13" rx="1.5" fill="#111827" />
+                            
+                            <rect x="70" y="5" width="25" height="25" rx="3" stroke="#d35400" strokeWidth="4" />
+                            <rect x="76" y="11" width="13" height="13" rx="1.5" fill="#111827" />
+                            
+                            <rect x="5" y="70" width="25" height="25" rx="3" stroke="#d35400" strokeWidth="4" />
+                            <rect x="11" y="76" width="13" height="13" rx="1.5" fill="#111827" />
+
+                            {/* Small sync pattern */}
+                            <rect x="75" y="75" width="10" height="10" rx="1" stroke="#111827" strokeWidth="2" />
+                            
+                            {/* Random pixel matrix mapping the token for real uniqueness */}
+                            {Array.from({ length: 12 }).map((_, r) => {
+                              return Array.from({ length: 12 }).map((_, c) => {
+                                // Skip corner anchor areas
+                                if ((r < 4 && c < 4) || (r < 4 && c > 7) || (r > 7 && c < 4)) return null;
+                                // Deterministic pseudorandom block generator based on token
+                                const seedVal = qrToken ? qrToken.charCodeAt((r * 12 + c) % qrToken.length) : (r * 13 + r * 19);
+                                const isActive = (seedVal % 3) === 0 || (seedVal % 7) === 2;
+                                if (!isActive) return null;
+                                return (
+                                  <rect
+                                    key={`${r}-${c}`}
+                                    x={10 + r * 6.6}
+                                    y={10 + c * 6.6}
+                                    width="5"
+                                    height="5"
+                                    rx="0.5"
+                                    fill={qrStatus === 'scanned' ? '#059669' : '#1f2937'}
+                                  />
+                                );
+                              });
+                            })}
+
+                            {/* Center branding icon badge */}
+                            <rect x="42" y="42" width="16" height="16" rx="3" fill="#d35400" stroke="#ffffff" strokeWidth="2" />
+                            <circle cx="50" cy="50" r="4" fill="#ffffff" />
+                          </svg>
+
+                          {/* Quick scanning feedback overlay */}
+                          {qrStatus === 'scanned' && (
+                            <div className="absolute inset-0 bg-emerald-500/90 backdrop-blur-xs flex flex-col items-center justify-center p-3 text-white text-center">
+                              <Fingerprint className="w-10 h-10 animate-pulse text-white mb-2" />
+                              <span className="text-xs font-mono font-bold uppercase tracking-wider">Device Synced</span>
+                              <span className="text-[9px] font-mono text-emerald-100 mt-1">Accept the signature payload on your mobile device</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Status message */}
+                        <div className="text-center space-y-1">
+                          <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-gray-500 block">
+                            Secure Handshake Status:
+                          </span>
+                          <span className={`text-xs font-mono font-black uppercase ${
+                            qrStatus === 'scanned' ? 'text-emerald-600 animate-pulse' :
+                            qrStatus === 'rejected' ? 'text-rose-600' :
+                            'text-orange-brand'
+                          }`}>
+                            {qrStatus === 'pending' && '● Awaiting Camera Scan...'}
+                            {qrStatus === 'scanned' && '● Biometric confirmation required...'}
+                            {qrStatus === 'authorized' && '● Session Authorized! Entering...'}
+                            {qrStatus === 'rejected' && '⚠️ Verification Rejected'}
+                          </span>
+                        </div>
+
+                        {/* Prompt scanner phone simulation block */}
+                        <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2 text-left">
+                          <div className="flex items-center gap-2 text-gray-800">
+                            <Smartphone className="w-4 h-4 text-orange-brand" />
+                            <span className="text-xs font-bold font-mono uppercase tracking-wider text-gray-900">Simulated Authenticator App</span>
+                          </div>
+                          <p className="text-[10px] text-gray-500 leading-relaxed font-mono">
+                            Because you are running in an isolated container sandbox, you can simulate scanning this secure QR signature key with your phone.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsPhoneSimOpen(true);
+                              if (phoneStatus === 'home') {
+                                setPhoneStatus('app');
+                              }
+                            }}
+                            className="w-full py-2 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 rounded-lg text-[10px] font-mono font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs hover:shadow-sm"
+                          >
+                            <Scan className="w-3.5 h-3.5 text-orange-brand" />
+                            Launch Phone Authenticator
+                          </button>
+                        </div>
+
+                        {/* Re-initiate button */}
+                        <div className="flex justify-center pt-1">
+                          <button
+                            type="button"
+                            onClick={handleInitiateQR}
+                            className="text-[10px] font-mono text-gray-400 hover:text-gray-700 flex items-center gap-1 cursor-pointer"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            <span>Regenerate Signature Key</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="block text-[10px] font-mono font-bold text-gray-600 uppercase tracking-widest mb-1.5">
+                            {t('usernameLabel')}
+                          </label>
+                          <input
+                            type="text"
+                            required={isSignUp}
+                            placeholder={isSignUp ? "e.g., AliceSmith" : t('usernamePlaceholder')}
+                            value={usernameInput}
+                            onChange={(e) => setUsernameInput(e.target.value)}
+                            className="w-full text-xs p-3 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-brand transition-all"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-mono font-bold text-gray-600 uppercase tracking-widest mb-1.5">
+                            {t('emailLabel')}
+                          </label>
+                          <div className="flex">
+                            <input
+                               type="text"
+                               placeholder={isSignUp ? "yourname" : "operator"}
+                               value={emailInput.split('@')[0]}
+                               onChange={(e) => {
+                                 const val = e.target.value;
+                                 setEmailInput(tier === 'premium' ? `${val}@utubemail.com` : `${val}@utubemail.free`);
+                               }}
+                               className="w-full text-xs p-3 rounded-l-xl border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-brand transition-all"
+                            />
+                            <span className="bg-gray-200 text-gray-600 px-4 flex items-center text-xs font-mono border-y border-r border-gray-300 rounded-r-xl">
+                              {tier === 'premium' ? '@utubemail.com' : '@utubemail.free'}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-gray-500 mt-1 leading-snug">
+                            Linked node domain suffix dynamically reflects your active preview tier.
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-mono font-bold text-gray-600 uppercase tracking-widest mb-1.5 flex justify-between">
+                            <span>{t('passwordLabel')}</span>
+                            <span className="text-[9px] text-orange-brand font-semibold lowercase tracking-normal">
+                              {t('locallyEncrypted')}
+                            </span>
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showPassword ? "text" : "password"}
+                              required
+                              placeholder="••••••••••••••"
+                              value={passwordInput}
+                              onChange={(e) => setPasswordInput(e.target.value)}
+                              className="w-full text-xs p-3 pr-10 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-brand transition-all font-mono"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowPassword(!showPassword)}
+                              className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600 cursor-pointer"
+                            >
+                              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
+
+                          {/* Real-time Password Strength Visual Indicator */}
+                          {isSignUp && passwordInput && (
+                            <div className="mt-2.5 p-3.5 bg-gray-50 border border-gray-200 rounded-xl space-y-2.5 transition-all duration-300">
+                              <div className="flex items-center justify-between text-[10px]">
+                                <span className="font-mono text-gray-500 uppercase tracking-wider font-bold">{t('keyStrength')}:</span>
+                                <span className={`font-mono font-black uppercase tracking-wider text-[11px] ${
+                                  strengthScore === 1 ? 'text-rose-600 animate-pulse' :
+                                  strengthScore === 2 ? 'text-amber-600' :
+                                  strengthScore === 3 ? 'text-indigo-600 font-bold' :
+                                  'text-emerald-600 font-black'
+                                }`}>
+                                  {strengthScore === 1 && 'Critical Vulnerability ⚠️'}
+                                  {strengthScore === 2 && 'Susceptible / Weak'}
+                                  {strengthScore === 3 && 'Armored Key Pair'}
+                                  {strengthScore === 4 && 'Post-Quantum Secure ⚡'}
+                                </span>
+                              </div>
+
+                              {/* 4 Segmented bar */}
+                              <div className="grid grid-cols-4 gap-1.5 h-1.5">
+                                {[1, 2, 3, 4].map((seg) => (
+                                  <div
+                                    key={seg}
+                                    className={`h-full rounded-full transition-all duration-300 ${
+                                      seg <= strengthScore
+                                        ? strengthScore === 1 ? 'bg-rose-500' :
+                                          strengthScore === 2 ? 'bg-amber-500' :
+                                          strengthScore === 3 ? 'bg-indigo-500' :
+                                          'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]'
+                                        : 'bg-gray-200'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+
+                              {/* Requirements list with active colored badges */}
+                              <div className="grid grid-cols-2 gap-x-3 gap-y-2 pt-1 text-[10px] font-mono">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${isLengthValid ? 'bg-emerald-500 scale-125' : 'bg-gray-300'}`} />
+                                  <span className={isLengthValid ? 'text-gray-900 font-extrabold' : 'text-gray-500'}>8+ Characters</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${isCasingValid ? 'bg-emerald-500 scale-125' : 'bg-gray-300'}`} />
+                                  <span className={isCasingValid ? 'text-gray-900 font-extrabold' : 'text-gray-500'}>Aa-Zz Casing</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${isNumberValid ? 'bg-emerald-500 scale-125' : 'bg-gray-300'}`} />
+                                  <span className={isNumberValid ? 'text-gray-900 font-extrabold' : 'text-gray-500'}>0-9 Number</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${isSymbolValid ? 'bg-emerald-500 scale-125' : 'bg-gray-300'}`} />
+                                  <span className={isSymbolValid ? 'text-gray-900 font-extrabold' : 'text-gray-500'}>Special Symbol</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {!isSignUp && (
+                            <div className="flex justify-end mt-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsRecoveryOpen(true);
+                                  setRecoveryStep('request');
+                                  setRecoveryEmail(emailInput);
+                                  setRecoveryFeedback(null);
+                                  setRecoveryCode(null);
+                                  setRecoverySuccess(false);
+                                  setNewPasswordInput('');
+                                  setConfirmPasswordInput('');
+                                  setRecoveryCodeInput('');
+                                }}
+                                className="text-[10px] font-mono text-orange-brand hover:text-orange-brand/80 hover:underline transition-colors focus:outline-none cursor-pointer uppercase tracking-wider font-bold"
+                              >
+                                Forgot Passkey Signature?
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {isSignUp && (
+                          <div className="flex items-start gap-2 pt-1">
+                            <input
+                              type="checkbox"
+                              id="terms"
+                              required
+                              className="mt-0.5 rounded text-orange-brand focus:ring-orange-brand border-gray-300"
+                            />
+                            <label htmlFor="terms" className="text-[11px] text-gray-600 leading-normal">
+                              {t('termsConsent')}
+                            </label>
+                          </div>
+                        )}
+
+                        {/* Interactive buttons highlighted in striking, vibrant dark transparent orange */}
+                        <button
+                          type="submit"
+                          className="w-full mt-2 py-3 bg-orange-trans hover:bg-orange-brand/20 text-orange-brand border border-orange-brand/30 rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all duration-300 shadow-sm hover:shadow flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <span>
+                            {isSignUp ? t('signUpBtn') : t('signInBtn')}
+                          </span>
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
 
                   </form>
                 )}
@@ -976,24 +1200,72 @@ export default function App() {
             <div className="lg:w-2/3 space-y-3">
               {[
                 {
-                  q: "What is CommandNexus and how does it secure my email?",
-                  a: "CommandNexus is our underlying secure ecosystem core. Every email payload, metadata element, and profile setting on utubemail.com is encrypted using AES-GCM-256 and salted pbkdf2 key derivations on the client-side/server edge, preventing unauthenticated routing and zero-knowledge access."
+                  q: t('faq1Q'),
+                  a: t('faq1A')
                 },
                 {
-                  q: "Where is my data stored and is it private?",
-                  a: "Your cryptographic mail and security settings are stored in decentralized zero-knowledge vault nodes. Neither utubemail.com nor third-party network providers hold decrypted raw keys; only your local key can decrypt your mailbox data."
+                  q: t('faq2Q'),
+                  a: t('faq2A')
                 },
                 {
-                  q: "What is the difference between free and premium encryption tiers?",
-                  a: "Standard tier offers post-quantum signature verification and basic end-to-end encryption. Premium tier unlocks 4K-integrated multi-device payload signing, real-time dynamic salt rotation, and fully dedicated secure enclave computing instances on the CommandNexus grid."
+                  q: t('faq3Q'),
+                  a: t('faq3A')
                 },
                 {
-                  q: "How does the simulated SMTP email bypass work?",
-                  a: "For security and testing purposes within our preview, the system bypasses public relays and routes verified activations directly. Authentic production environments route through TLS-hardened, zero-logging transport pipelines."
+                  q: t('faq4Q'),
+                  a: t('faq4A')
                 },
                 {
-                  q: "Can anyone access my inbox without my cryptographic passkey?",
-                  a: "Absolutely not. Even system administrators and node operators see only salted, non-invertible hashes. Without the passkey to compute the matching PBKDF2 hash, your inbox remains cryptographically inaccessible."
+                  q: t('faq5Q'),
+                  a: t('faq5A')
+                },
+                {
+                  q: t('faqSecQ'),
+                  a: (
+                    <div className="space-y-3 font-sans">
+                      <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
+                        {t('faqSecA')}
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                        <div className="p-3 bg-gray-50 rounded-xl border border-gray-150 flex flex-col gap-1 shadow-2xs hover:border-orange-brand/30 transition-all">
+                          <span className="text-[10px] font-mono font-extrabold text-orange-brand uppercase tracking-wider">
+                            {t('faqSecSymmetric')}
+                          </span>
+                          <span className="text-xs font-bold text-gray-900 font-display">AES-GCM-256</span>
+                          <span className="text-[10px] text-gray-500 leading-normal font-mono">
+                            {t('faqSecSymmetricDesc')}
+                          </span>
+                        </div>
+                        <div className="p-3 bg-gray-50 rounded-xl border border-gray-150 flex flex-col gap-1 shadow-2xs hover:border-indigo-500/30 transition-all">
+                          <span className="text-[10px] font-mono font-extrabold text-indigo-600 uppercase tracking-wider">
+                            {t('faqSecDerivation')}
+                          </span>
+                          <span className="text-xs font-bold text-gray-900 font-display">PBKDF2 HMAC-SHA256</span>
+                          <span className="text-[10px] text-gray-500 leading-normal font-mono">
+                            {t('faqSecDerivationDesc')}
+                          </span>
+                        </div>
+                        <div className="p-3 bg-gray-50 rounded-xl border border-gray-150 flex flex-col gap-1 shadow-2xs hover:border-emerald-500/30 transition-all">
+                          <span className="text-[10px] font-mono font-extrabold text-emerald-600 uppercase tracking-wider">
+                            {t('faqSecAsymmetric')}
+                          </span>
+                          <span className="text-xs font-bold text-gray-900 font-display">ECDH-P384 & Ed25519</span>
+                          <span className="text-[10px] text-gray-500 leading-normal font-mono">
+                            {t('faqSecAsymmetricDesc')}
+                          </span>
+                        </div>
+                        <div className="p-3 bg-gray-50 rounded-xl border border-gray-150 flex flex-col gap-1 shadow-2xs hover:border-amber-500/30 transition-all">
+                          <span className="text-[10px] font-mono font-extrabold text-amber-600 uppercase tracking-wider">
+                            {t('faqSecTransit')}
+                          </span>
+                          <span className="text-xs font-bold text-gray-900 font-display">TLS 1.3 / Forward Secrecy</span>
+                          <span className="text-[10px] text-gray-500 leading-normal font-mono">
+                            {t('faqSecTransitDesc')}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )
                 }
               ].map((faq, index) => {
                 const isOpen = activeFaqIndex === index;
@@ -1029,9 +1301,9 @@ export default function App() {
                           transition={{ duration: 0.25, ease: "easeInOut" }}
                         >
                           <div className="px-4 pb-4 pt-1 border-t border-gray-100/50">
-                            <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
+                            <div className="text-xs sm:text-sm text-gray-700 leading-relaxed">
                               {faq.a}
-                            </p>
+                            </div>
                           </div>
                         </motion.div>
                       )}
@@ -1471,6 +1743,341 @@ export default function App() {
 
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* IMMERSIVE SMARTPHONE SIMULATOR WIDGET FOR SECURE QR CODE LOGIN SCANNING */}
+      <AnimatePresence>
+        {isPhoneSimOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 100, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+            transition={{ type: "spring", damping: 25, stiffness: 180 }}
+            className="fixed bottom-6 right-6 w-[320px] h-[580px] bg-[#0c0d10] border-4 border-[#232630] rounded-[40px] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)] overflow-hidden z-50 flex flex-col font-sans select-none"
+            style={{ boxShadow: "0 0 35px rgba(211,84,0,0.2)" }}
+          >
+            {/* Top Notch / Dynamic Island */}
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-32 h-6 bg-black rounded-full z-30 flex items-center justify-center p-1">
+              <div className="w-3 h-3 bg-gray-950 rounded-full border border-gray-800 ml-auto mr-1" />
+            </div>
+
+            {/* Simulated Phone Header Status Bar */}
+            <div className="h-10 bg-black text-white px-6 flex items-center justify-between text-[11px] font-mono z-20 shrink-0">
+              <span className="font-bold">04:55 AM</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] bg-orange-brand/20 text-orange-brand px-1 rounded border border-orange-brand/30">LTE</span>
+                <span className="text-[10px]">🔋 88%</span>
+              </div>
+            </div>
+
+            {/* Main Phone Screen Frame */}
+            <div className="flex-1 bg-gradient-to-b from-[#111319] to-[#08090d] text-white p-5 flex flex-col relative overflow-hidden">
+              
+              {/* Wallpaper backdrop accents */}
+              <div className="absolute -top-12 -left-12 w-48 h-48 bg-orange-brand/5 rounded-full blur-2xl pointer-events-none" />
+              <div className="absolute -bottom-12 -right-12 w-48 h-48 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
+
+              {/* Close Phone button */}
+              <button
+                type="button"
+                onClick={() => setIsPhoneSimOpen(false)}
+                className="absolute top-3 right-3 text-gray-500 hover:text-white transition-colors cursor-pointer z-30 text-[10px] bg-white/5 px-2.5 py-1 rounded-full border border-white/10"
+              >
+                Dismiss Phone
+              </button>
+
+              {/* PHONE SCREEN STATES */}
+              {phoneStatus === 'home' && (
+                <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6 pt-6">
+                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-orange-brand to-amber-500 flex items-center justify-center shadow-lg shadow-orange-brand/20 animate-pulse">
+                    <QrCode className="w-10 h-10 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black font-mono tracking-wider uppercase text-gray-100">UTube Authenticator</h3>
+                    <p className="text-xs text-gray-400 mt-1.5 leading-relaxed px-4">
+                      Deploy your cryptographic biometric keychain signatures instantly to authorize node terminals.
+                    </p>
+                  </div>
+                  
+                  <button
+                    type="button"
+                    onClick={() => setPhoneStatus('app')}
+                    className="px-6 py-3 bg-orange-brand hover:bg-orange-brand/90 text-white font-mono text-[11px] font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md shadow-orange-brand/10"
+                  >
+                    Launch Authenticator App
+                  </button>
+                </div>
+              )}
+
+              {phoneStatus === 'app' && (
+                <div className="flex-1 flex flex-col pt-8 justify-between">
+                  <div className="space-y-4">
+                    <div className="text-center">
+                      <span className="text-[9px] font-mono font-bold tracking-widest text-orange-brand uppercase bg-orange-brand/10 px-2.5 py-1 rounded-full border border-orange-brand/10">
+                        Secure Enclave Node
+                      </span>
+                      <h3 className="text-sm font-black font-mono tracking-wider text-white uppercase mt-2.5">
+                        Handshake Controller
+                      </h3>
+                    </div>
+
+                    <div className="space-y-3 bg-white/5 p-4 rounded-2xl border border-white/10">
+                      <div>
+                        <label className="block text-[9px] font-mono font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                          Operator Account (Email Handle)
+                        </label>
+                        <select
+                          value={phoneAccount}
+                          onChange={(e) => setPhoneAccount(e.target.value)}
+                          className="w-full text-xs p-2.5 rounded-xl border border-white/10 bg-gray-950 text-white focus:outline-none focus:ring-1 focus:ring-orange-brand transition-all"
+                        >
+                          <option value="operator@utubemail.com">Sovereign Operator (operator@utubemail.com)</option>
+                          <option value="administrator@utubemail.com">Global Administrator (administrator@utubemail.com)</option>
+                          <option value="custom@utubemail.com">Custom Operator (custom@utubemail.com)</option>
+                        </select>
+                      </div>
+
+                      <div className="text-[10px] text-gray-400 leading-normal font-mono">
+                        This email will be bound to the authorized session token upon biometric approval.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2.5 pb-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!qrToken) {
+                          alert("Please generate a QR Code on the desktop sign-in form first!");
+                          return;
+                        }
+                        setPhoneStatus('scanning');
+                        setScanProgress(0);
+                        const interval = setInterval(() => {
+                          setScanProgress((prev) => {
+                            if (prev >= 100) {
+                              clearInterval(interval);
+                              // Trigger scanning API endpoint
+                              fetch("/api/auth/qr/scan", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ token: qrToken, email: phoneAccount })
+                              })
+                              .then((res) => {
+                                if (res.ok) {
+                                  setPhoneStatus('verifying');
+                                } else {
+                                  alert("Scanning sync error. Make sure QR on screen is valid!");
+                                  setPhoneStatus('app');
+                                }
+                              })
+                              .catch((err) => {
+                                console.error(err);
+                                setPhoneStatus('app');
+                              });
+                              return 100;
+                            }
+                            return prev + 20;
+                          });
+                        }, 300);
+                      }}
+                      className="w-full py-3.5 bg-orange-brand hover:bg-orange-brand/90 text-white font-mono text-xs font-bold uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Scan className="w-4 h-4" />
+                      Scan Desktop QR Code
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPhoneStatus('home')}
+                      className="w-full py-2 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white font-mono text-[10px] uppercase rounded-lg transition-all cursor-pointer"
+                    >
+                      Back to Home Lockscreen
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {phoneStatus === 'scanning' && (
+                <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6 pt-10">
+                  <div className="relative w-44 h-44 border-2 border-dashed border-orange-brand/60 rounded-3xl overflow-hidden flex items-center justify-center bg-gray-950">
+                    {/* Laser line effect */}
+                    <div className="absolute left-0 right-0 h-1 bg-red-500/80 shadow-[0_0_8px_rgba(239,68,68,0.8)] animate-bounce z-10" />
+                    
+                    <QrCode className="w-20 h-20 text-gray-700 animate-pulse" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-orange-brand">
+                      Scanning Screen Matrix...
+                    </h4>
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      Aligning camera aperture to read cryptotoken signatures.
+                    </p>
+                  </div>
+                  <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden px-1">
+                    <div className="bg-orange-brand h-full rounded-full transition-all duration-300" style={{ width: `${scanProgress}%` }} />
+                  </div>
+                </div>
+              )}
+
+              {phoneStatus === 'verifying' && (
+                <div className="flex-1 flex flex-col pt-8 justify-between">
+                  <div className="space-y-4">
+                    <div className="text-center">
+                      <Shield className="w-10 h-10 text-orange-brand mx-auto mb-2" />
+                      <h4 className="text-sm font-black font-mono uppercase tracking-wider text-white">
+                        Access Request Verified
+                      </h4>
+                      <p className="text-[10px] text-gray-400 mt-1">
+                        Cryptographic handshakes match. Awaiting validation.
+                      </p>
+                    </div>
+
+                    <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-2.5 font-mono text-[10px] text-left">
+                      <div className="flex justify-between border-b border-white/5 pb-1">
+                        <span className="text-gray-500">CLIENT APP:</span>
+                        <span className="font-bold text-gray-300 text-right">UTube Media Desktop Web</span>
+                      </div>
+                      <div className="flex justify-between border-b border-white/5 pb-1">
+                        <span className="text-gray-500">OPERATOR:</span>
+                        <span className="font-bold text-orange-brand text-right truncate max-w-[150px]">{phoneAccount}</span>
+                      </div>
+                      <div className="flex justify-between border-b border-white/5 pb-1">
+                        <span className="text-gray-500">PREV ADDR:</span>
+                        <span className="font-bold text-gray-300 text-right">10.142.0.19 Enclave</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">CRYPTOTOKEN:</span>
+                        <span className="font-bold text-gray-300 text-right truncate max-w-[150px]">{qrToken?.slice(0, 15)}...</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pb-2">
+                    {isBiometricScanning ? (
+                      <div className="p-4 bg-white/5 rounded-xl border border-white/10 text-center space-y-3">
+                        <Fingerprint className="w-10 h-10 text-emerald-500 animate-pulse mx-auto" />
+                        <span className="text-xs font-mono font-bold text-emerald-400 block animate-pulse">
+                          Verifying FaceID/Fingerprint Signature...
+                        </span>
+                        <div className="w-full bg-gray-800 h-1 rounded-full overflow-hidden">
+                          <div className="bg-emerald-500 h-full rounded-full transition-all duration-200" style={{ width: `${biometricProgress}%` }} />
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsBiometricScanning(true);
+                            setBiometricProgress(0);
+                            const interval = setInterval(() => {
+                              setBiometricProgress((prev) => {
+                                if (prev >= 100) {
+                                  clearInterval(interval);
+                                  // Call authorization API endpoint with approve: true
+                                  fetch("/api/auth/qr/authorize", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ token: qrToken, email: phoneAccount, approve: true })
+                                  })
+                                  .then((res) => {
+                                    if (res.ok) {
+                                      setPhoneStatus('success');
+                                      setIsBiometricScanning(false);
+                                    }
+                                  })
+                                  .catch((err) => console.error(err));
+                                  return 100;
+                                }
+                                return prev + 10;
+                              });
+                            }, 150);
+                          }}
+                          className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-bold uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-emerald-500/10"
+                        >
+                          <Fingerprint className="w-4 h-4" />
+                          Approve Handshake
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            fetch("/api/auth/qr/authorize", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ token: qrToken, email: phoneAccount, approve: false })
+                            })
+                            .then(() => {
+                              setPhoneStatus('rejected');
+                            })
+                            .catch((err) => console.error(err));
+                          }}
+                          className="w-full py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 font-mono text-[10px] uppercase rounded-lg transition-all cursor-pointer"
+                        >
+                          Reject Access Request
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {phoneStatus === 'success' && (
+                <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6 pt-6">
+                  <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/5 animate-bounce">
+                    <CheckCircle className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black font-mono tracking-wider text-emerald-400 uppercase">
+                      Signature Transmitted
+                    </h3>
+                    <p className="text-xs text-gray-400 mt-2 leading-relaxed px-2">
+                      Authentication payload successfully authorized and dispatched to desktop node.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPhoneStatus('home');
+                    }}
+                    className="px-6 py-2 bg-white/5 hover:bg-white/10 text-gray-300 font-mono text-[10px] uppercase tracking-wider rounded-lg border border-white/10 cursor-pointer"
+                  >
+                    Lock Device
+                  </button>
+                </div>
+              )}
+
+              {phoneStatus === 'rejected' && (
+                <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6 pt-6">
+                  <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-500 flex items-center justify-center shadow-lg animate-bounce">
+                    <ShieldAlert className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black font-mono tracking-wider text-rose-400 uppercase">
+                      Handshake Denied
+                    </h3>
+                    <p className="text-xs text-gray-400 mt-2 leading-relaxed px-2">
+                      You rejected the desktop access request. The session authorization was immediately aborted.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPhoneStatus('app');
+                    }}
+                    className="px-6 py-2 bg-white/5 hover:bg-white/10 text-gray-300 font-mono text-[10px] uppercase tracking-wider rounded-lg border border-white/10 cursor-pointer"
+                  >
+                    Back to app
+                  </button>
+                </div>
+              )}
+
+              {/* Home Screen indicator pill */}
+              <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 w-28 h-1 bg-white/20 rounded-full z-30" />
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 

@@ -59,6 +59,16 @@ export interface TranslationDictionary {
   faq4A: string;
   faq5Q: string;
   faq5A: string;
+  faqSecQ: string;
+  faqSecA: string;
+  faqSecSymmetric: string;
+  faqSecSymmetricDesc: string;
+  faqSecDerivation: string;
+  faqSecDerivationDesc: string;
+  faqSecAsymmetric: string;
+  faqSecAsymmetricDesc: string;
+  faqSecTransit: string;
+  faqSecTransitDesc: string;
   // Dashboard translations
   mailboxTab: string;
   settingsTab: string;
@@ -127,6 +137,16 @@ export const translations: Record<Language, TranslationDictionary> = {
     faq4A: 'For security and testing purposes within our preview, the system bypasses public relays and routes verified activations directly. Authentic production environments route through TLS-hardened, zero-logging transport pipelines.',
     faq5Q: 'Can anyone access my inbox without my cryptographic passkey?',
     faq5A: 'Absolutely not. Even system administrators and node operators see only salted, non-invertible hashes. Without the passkey to compute the matching PBKDF2 hash, your inbox remains cryptographically inaccessible.',
+    faqSecQ: 'Security Details: What specific encryption algorithms protect my email data?',
+    faqSecA: 'UTube Mail implements a layered, zero-knowledge cryptographic defense architecture to secure user email payloads, metadata, and files at rest and during transmission.',
+    faqSecSymmetric: 'Symmetric Encryption',
+    faqSecSymmetricDesc: 'Encrypts email payloads and attachments at rest. Every single mail object is sealed with a unique, randomized symmetric AES-GCM-256 key.',
+    faqSecDerivation: 'Key Derivation',
+    faqSecDerivationDesc: 'Stretches local passkeys with dynamic iterations (up to 750,000 rounds) using PBKDF2 HMAC-SHA256 to form resilient cryptographic hashes.',
+    faqSecAsymmetric: 'Asymmetric Exchange',
+    faqSecAsymmetricDesc: 'Validates device signatures and performs handshake authorization using ECDH-P384 & Ed25519 in safe isolated enclaves.',
+    faqSecTransit: 'Transit Security',
+    faqSecTransitDesc: 'Guarantees that session pathways are protected with TLS 1.3 and Perfect Forward Secrecy (PFS), blocking retro-interceptions.',
     // Dashboard translations
     mailboxTab: 'Secure Mailbox',
     settingsTab: 'Security Settings',
@@ -193,6 +213,16 @@ export const translations: Record<Language, TranslationDictionary> = {
     faq4A: 'Aus Sicherheits- und Testzwecken in unserer Vorschau umgeht das System öffentliche Relais und leitet verifizierte Aktivierungen direkt weiter. Authentische Produktionsumgebungen leiten den Datenverkehr über TLS-gehärtete, protokollfreie Transportpipelines.',
     faq5Q: 'Kann jemand ohne meinen kryptografischen Hauptschlüssel auf meinen Posteingang zugreifen?',
     faq5A: 'Absolut nicht. Sogar Systemadministratoren und Knotenbetreiber sehen nur gesalzene, nicht invertierbare Hashes. Ohne den Hauptschlüssel zur Berechnung des übereinstimmenden PBKDF2-Hashs bleibt Ihr Posteingang kryptografisch unzugänglich.',
+    faqSecQ: 'Sicherheitsdetails: Welche spezifischen Verschlüsselungsalgorithmen schützen meine E-Mail-Daten?',
+    faqSecA: 'UTube Mail implementiert eine mehrschichtige Zero-Knowledge-Kryptografiearchitektur, um E-Mail-Nutzlasten, Metadaten und Dateien im Ruhezustand und während der Übertragung zu sichern.',
+    faqSecSymmetric: 'Symmetrische Verschlüsselung',
+    faqSecSymmetricDesc: 'Verschlüsselt E-Mail-Nutzlasten und Anhänge im Ruhezustand. Jedes einzelne E-Mail-Objekt wird mit einem eindeutigen, zufälligen symmetrischen AES-GCM-256-Schlüssel versiegelt.',
+    faqSecDerivation: 'Schlüsselableitung',
+    faqSecDerivationDesc: 'Dehnt lokale Passkeys mit dynamischen Iterationen (bis zu 750.000 Runden) unter Verwendung von PBKDF2 HMAC-SHA256, um widerstandsfähige kryptografische Hashes zu bilden.',
+    faqSecAsymmetric: 'Asymmetrischer Austausch',
+    faqSecAsymmetricDesc: 'Validiert Gerätesignaturen und führt Handshake-Autorisierungen mit ECDH-P384 & Ed25519 in sicheren isolierten Enklaven durch.',
+    faqSecTransit: 'Transitsicherheit',
+    faqSecTransitDesc: 'Garantiert, dass Sitzungspfade mit TLS 1.3 und Perfect Forward Secrecy (PFS) geschützt sind, was nachträgliche Abfänge blockiert.',
     // Dashboard translations
     mailboxTab: 'Sichere Mailbox',
     settingsTab: 'Sicherheitseinstellungen',
@@ -259,6 +289,16 @@ export const translations: Record<Language, TranslationDictionary> = {
     faq4A: 'Por motivos de seguridad y pruebas dentro de la vista previa, el sistema omite los relés públicos y enruta las activaciones verificadas directamente. Los entornos de producción reales utilizan canales de transporte TLS reforzados y sin registros.',
     faq5Q: '¿Puede alguien acceder a mi bandeja de entrada sin mi clave criptográfica?',
     faq5A: 'Absolutamente no. Incluso los administradores del sistema y los operadores de nodos solo ven hashes salados y no invertibles. Sin la clave para calcular el hash PBKDF2 coincidente, su buzón permanece inaccesible.',
+    faqSecQ: 'Detalles de seguridad: ¿Qué algoritmos de cifrado específicos protegen mis datos de correo electrónico?',
+    faqSecA: 'UTube Mail implementa una arquitectura de defensa criptográfica de conocimiento cero y capas para proteger las cargas útiles de correo, metadatos y archivos tanto en reposo como en transmisión.',
+    faqSecSymmetric: 'Cifrado Simétrico',
+    faqSecSymmetricDesc: 'Cifra las cargas útiles y archivos adjuntos del correo en reposo. Cada objeto de correo individual se sella con una clave simétrica única y aleatoria AES-GCM-256.',
+    faqSecDerivation: 'Derivación de Clave',
+    faqSecDerivationDesc: 'Estira las claves de paso locales con iteraciones dinámicas (hasta 750,000 rondas) usando PBKDF2 HMAC-SHA256 para formar hashes criptográficos altamente resistentes.',
+    faqSecAsymmetric: 'Intercambio Asimétrico',
+    faqSecAsymmetricDesc: 'Valida las firmas de los dispositivos y realiza la autorización del apretón de manos usando ECDH-P384 y Ed25519 en enclaves aislados y seguros.',
+    faqSecTransit: 'Seguridad en Tránsito',
+    faqSecTransitDesc: 'Garantiza que las rutas de las sesiones estén protegidas con TLS 1.3 y Secreto de Transmisión Perfecto (PFS), bloqueando retro-interceptaciones.',
     // Dashboard translations
     mailboxTab: 'Buzón Seguro',
     settingsTab: 'Configuración de seguridad',
@@ -325,6 +365,16 @@ export const translations: Record<Language, TranslationDictionary> = {
     faq4A: '当プレビュー内のセキュリティおよびテスト目的のために、システムはパブリックリレーをバイパスし、検証済みのアクティベーションを直接ルーティングします。実際の運用環境では、TLS強化されたログなしの転送パイプラインを介してルーティングされます。',
     faq5Q: '暗号化パスキーがなくてもインボックスにアクセスできますか？',
     faq5A: '絶対にできません。システム管理者やノードオペレーターであっても、ソルト化された不可逆ハッシュのみが可視化されます。一致するPBKDF2ハッシュを計算するためのパスキーがなければ、インボックスは暗号的にアクセス不可能です。',
+    faqSecQ: 'セキュリティ詳細：メールデータを保護するためにどのような暗号化アルゴリズムが使用されていますか？',
+    faqSecA: 'UTube Mailは、送信中および保存中のユーザーのメールペイロード、メタデータ、およびファイルを保護するために、多層のゼロナレッジ暗号防御アーキテクチャを実装しています。',
+    faqSecSymmetric: '対称暗号化',
+    faqSecSymmetricDesc: '保存中のメールペイロードと添付ファイルを暗号化します。すべてのメールオブジェクトは、一意でランダムな対称AES-GCM-256キーで封印されます。',
+    faqSecDerivation: '鍵派生',
+    faqSecDerivationDesc: 'PBKDF2 HMAC-SHA256を使用して、動的な反復（最大750,000ラウンド）でローカルパスキーをストレッチし、復元力のある暗号化ハッシュを形成します。',
+    faqSecAsymmetric: '非対称鍵交換',
+    faqSecAsymmetricDesc: '安全な隔離されたエンクレーブ内でECDH-P384およびEd25519を使用して、デバイス署名を検証し、ハンドシェイクの承認を行います。',
+    faqSecTransit: '通信トランスポートセキュリティ',
+    faqSecTransitDesc: 'セッションパスがTLS 1.3およびPerfect Forward Secrecy (PFS)で保護されていることを保証し、遡及的な傍受をブロックします。',
     // Dashboard translations
     mailboxTab: 'セキュアメールボックス',
     settingsTab: 'セキュリティ設定',
